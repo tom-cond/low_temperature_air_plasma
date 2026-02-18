@@ -1,9 +1,15 @@
+"""
+File which takes in the 4 data sets from one of the low_two_temperature_reacting_air_kinetics.d unit tests.
+Change DATA_DIR to whatever directory will contain said .data files (for windows systems using WSL, it will most
+likely be easier if you save (in the unit test main()) them to the kinetics file in the gdtk)
+"""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import os
 
-# ── Configuration ──────────────────────────────────────────────────────────────
+# Config
 # Update this to the directory containing your .data files
 DATA_DIR = "//wsl.localhost/Ubuntu-20.04/home/tom_cond/gdtk/src/kinetics"
 
@@ -14,10 +20,10 @@ CASE_LABELS = [
     "Case 3: E=20000 V/m",
 ]
 
-# Fixed parameters common to all cases
-COMMON_PARAMS = "v_elec=2000 m/s, B=1 T, Qb=30 MW/m³"
+# Fixed params common to all cases
+COMMON_PARAMS = "v_elec=2000 m/s, B=1 T, Qb=30 MW/m^3"
 
-# ── Load data ──────────────────────────────────────────────────────────────────
+# Load data
 dfs = []
 for v in range(4):
     fname = os.path.join(DATA_DIR, f"two_temperature_reacting_air_kinetics_test_results_v{v}.data")
@@ -28,8 +34,8 @@ for v in range(4):
     dfs.append(df)
     print(f"Loaded {fname}: {len(df)} rows")
 
-# ── Temperature figure ─────────────────────────────────────────────────────────
-fig_T, axes_T = plt.subplots(2, 2, figsize=(14, 9), sharex=False)
+# Temp plot
+fig_T, axes_T = plt.subplots(2, 2, figsize=(14, 9), sharex=False) # We want a 2x2 set of plots
 axes_T = axes_T.flatten()
 
 for i, (ax, df, label) in enumerate(zip(axes_T, dfs, CASE_LABELS)):
@@ -46,36 +52,37 @@ for i, (ax, df, label) in enumerate(zip(axes_T, dfs, CASE_LABELS)):
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
 fig_T.suptitle(
-    f'Two-Temperature Air Kinetics — Temperature Evolution\n({COMMON_PARAMS})',
+    f'Two-Temperature Air Kinetics - Temperature Evolution\n({COMMON_PARAMS})',
     fontsize=13, fontweight='bold', y=1.01
 )
 plt.tight_layout()
 fig_T.savefig('kinetics_temperatures.png', dpi=150, bbox_inches='tight')
 print("Saved kinetics_temperatures.png")
 
-# ── Mass fraction figure ───────────────────────────────────────────────────────
+# Mass fraction plot
 NEUTRAL_SPECIES = {
-    'N2 mass fraction':  ('N₂',  'steelblue',    '-'),
-    'O2 mass fraction':  ('O₂',  'firebrick',     '-'),
-    'N mass fraction':   ('N',   'darkorange',    '--'),
-    'O mass fraction':   ('O',   'orchid',        '--'),
-    'NO mass fraction':  ('NO',  'dimgrey',       ':'),
+    'N2 mass fraction':  ('N2', 'steelblue' , '-' ),
+    'O2 mass fraction':  ('O2', 'firebrick' , '-' ),
+    'N mass fraction':   ('N' , 'darkorange', '--'),
+    'O mass fraction':   ('O' , 'orchid'    , '--'),
+    'NO mass fraction':  ('NO', 'dimgrey'   , ':' ),
 }
 
 ION_SPECIES = {
-    'e- mass fraction':  ('e⁻',   'black',        '-'),
-    'N2+ mass fraction': ('N₂⁺',  'steelblue',    '--'),
-    'O2+ mass fraction': ('O₂⁺',  'firebrick',    '--'),
-    'N+ mass fraction':  ('N⁺',   'darkorange',   ':'),
-    'O+ mass fraction':  ('O⁺',   'orchid',       ':'),
-    'O2- mass fraction': ('O₂⁻',  'seagreen',     '-.'),
-    'NO+ mass fraction': ('NO⁺',  'dimgrey',      '-.'),
+    'e- mass fraction':  ('e-' , 'black'     , '-' ),
+    'N2+ mass fraction': ('N2+', 'steelblue' , '--'),
+    'O2+ mass fraction': ('O2+', 'firebrick' , '--'),
+    'N+ mass fraction':  ('N+' , 'darkorange', ':' ),
+    'O+ mass fraction':  ('O+' , 'orchid'    , ':' ),
+    'O2- mass fraction': ('O2-', 'seagreen'  , '-.'),
+    'NO+ mass fraction': ('NO+', 'dimgrey'   , '-.'),
 }
 
 def plot_species_panel(ax, df, species_dict, title, log_scale=True):
     for col, (name, color, ls) in species_dict.items():
         vals = df[col]
-        if vals.max() > 0:
+        if vals.max() > 0: # Skip any species which do not have a mass fraction (useful for baseline cases)
+                           # Might change to machine epsilon as there may be floating point mass fractions due to stiffness
             ax.plot(df['time (s)'] * 1e6, vals,
                     label=name, color=color, linestyle=ls, linewidth=1.4)
     ax.set_title(title, fontsize=11, fontweight='bold')
@@ -85,9 +92,9 @@ def plot_species_panel(ax, df, species_dict, title, log_scale=True):
         ax.set_yscale('log')
     ax.grid(True, which='both', linestyle='--', alpha=0.5)
     ax.legend(fontsize=8, ncol=2)
-    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator()) # Shoutout matplotlib
 
-# ── Neutral species subplots ───────────────────────────────────────────────────
+# Neutral species subplots
 fig_n, axes_n = plt.subplots(2, 2, figsize=(14, 9))
 axes_n = axes_n.flatten()
 
@@ -95,14 +102,14 @@ for i, (ax, df, label) in enumerate(zip(axes_n, dfs, CASE_LABELS)):
     plot_species_panel(ax, df, NEUTRAL_SPECIES, label, log_scale=True)
 
 fig_n.suptitle(
-    f'Two-Temperature Air Kinetics — Neutral Species Mass Fractions\n({COMMON_PARAMS})',
+    f'Two-Temperature Air Kinetics, Neutral Species Mass Fractions\n({COMMON_PARAMS})',
     fontsize=13, fontweight='bold', y=1.01
 )
 plt.tight_layout()
 fig_n.savefig('kinetics_neutral_species.png', dpi=150, bbox_inches='tight')
 print("Saved kinetics_neutral_species.png")
 
-# ── Charged species subplots ───────────────────────────────────────────────────
+# Charged species subplots
 fig_i, axes_i = plt.subplots(2, 2, figsize=(14, 9))
 axes_i = axes_i.flatten()
 
@@ -110,7 +117,7 @@ for i, (ax, df, label) in enumerate(zip(axes_i, dfs, CASE_LABELS)):
     plot_species_panel(ax, df, ION_SPECIES, label, log_scale=True)
 
 fig_i.suptitle(
-    f'Two-Temperature Air Kinetics — Charged Species Mass Fractions\n({COMMON_PARAMS})',
+    f'Two-Temperature Air Kinetics, Charged Species Mass Fractions\n({COMMON_PARAMS})',
     fontsize=13, fontweight='bold', y=1.01
 )
 plt.tight_layout()
