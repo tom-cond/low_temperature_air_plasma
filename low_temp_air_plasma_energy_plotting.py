@@ -53,9 +53,9 @@ for i, (ax, df, label) in enumerate(zip(axes_T, dfs, CASE_LABELS)):
 
 fig_T.suptitle(
     f'Two-Temperature Air Kinetics - Temperature Evolution\n({COMMON_PARAMS})',
-    fontsize=13, fontweight='bold', y=1.01
+    fontsize=13, fontweight='bold'
 )
-plt.tight_layout()
+plt.tight_layout(rect=[0, 0, 1, 0.95])
 fig_T.savefig('kinetics_temperatures.png', dpi=150, bbox_inches='tight')
 print("Saved kinetics_temperatures.png")
 
@@ -103,9 +103,9 @@ for i, (ax, df, label) in enumerate(zip(axes_n, dfs, CASE_LABELS)):
 
 fig_n.suptitle(
     f'Two-Temperature Air Kinetics, Neutral Species Mass Fractions\n({COMMON_PARAMS})',
-    fontsize=13, fontweight='bold', y=1.01
+    fontsize=13, fontweight='bold'
 )
-plt.tight_layout()
+plt.tight_layout(rect=[0, 0, 1, 0.95])
 fig_n.savefig('kinetics_neutral_species.png', dpi=150, bbox_inches='tight')
 print("Saved kinetics_neutral_species.png")
 
@@ -118,9 +118,9 @@ for i, (ax, df, label) in enumerate(zip(axes_i, dfs, CASE_LABELS)):
 
 fig_i.suptitle(
     f'Two-Temperature Air Kinetics, Charged Species Mass Fractions\n({COMMON_PARAMS})',
-    fontsize=13, fontweight='bold', y=1.01
+    fontsize=13, fontweight='bold'
 )
-plt.tight_layout()
+plt.tight_layout(rect=[0, 0, 1, 0.95])
 fig_i.savefig('kinetics_charged_species.png', dpi=150, bbox_inches='tight')
 print("Saved kinetics_charged_species.png")
 
