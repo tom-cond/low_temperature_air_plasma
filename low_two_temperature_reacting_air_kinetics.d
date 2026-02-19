@@ -1148,173 +1148,171 @@ version(two_temperature_reacting_air_kinetics_test) {
     import util.msg_service;
     import std.math : isClose;
     import gas.low_two_temperature_reacting_air;
+    string unit_test_case = "relaxation";
     void main() {
-        //auto L = init_lua_State();
-        //doLuaFile(L, "sample-input/two-temperature-reacting-air-model.lua");
-        //auto gm = new TwoTemperatureReactingAir(L);
-        //auto reactor = new LowTwoTemperatureAirKinetics("sample-input/two-temperature-reacting-air-model.lua", gm);
-        //auto gd = GasState(gm);
-        //// Nick Gibbons air chemistry test case
-        //// We start with cold air, shocked to a high temperature but with a frozen air composition
-        //// The system should relax toward equilibrium
-        //gd.T = 12000.0; // K (Gas temperature post shock (i.e. transrotational temperature))
-        //gd.T_modes[0] = 300.0; // K (Vibroelectronic temperature)
-        //gd.p = 7.0 * 101.325e3; // Pa (7 atm)
-
-        //// Mass fractions
-        //gd.massf[] = 0.0;
-        //gd.massf[gm.species_index("O2")] = 0.233;
-        //gd.massf[gm.species_index("N2")] = 0.767;
-
-        //gm.update_thermo_from_pT(gd);
-
-        //// Initialise time loop
-        //number time = 0.0;
-        //number dt = 5.0e-8; // Super small timestep since the kinetics will be super stiff
-        //// If we do anything bigger than a nanosecond the stiffness of air chemical kinetics will push the test to failure
-        //number max_time = 60.0e-6; // 60 microseconds of simulation
-        //int n_steps = to!int(max_time/dt + 1);
-
-        //// Initialise storage arrays and values for the storage arrays
-        //number[] t_data, T_data, Tve_data, N_data, O_data, NO_data, N2_data, O2_data, Np_data, Op_data, O2p_data, O2m_data, N2p_data, NOp_data, e_data;
-        //t_data ~= 0.0; T_data ~= gd.T; Tve_data ~= gd.T_modes[0]; N_data ~= gd.massf[gm.species_index("N")]; O_data ~= gd.massf[gm.species_index("O")];
-        //NO_data ~= gd.massf[gm.species_index("NO")]; N2_data ~= gd.massf[gm.species_index("N2")]; O2_data ~= gd.massf[gm.species_index("O2")];
-        //Np_data ~= gd.massf[gm.species_index("N+")]; Op_data ~= gd.massf[gm.species_index("O+")]; O2p_data ~= gd.massf[gm.species_index("O2+")];
-        //O2m_data ~= gd.massf[gm.species_index("O2-")]; N2p_data ~= gd.massf[gm.species_index("N2+")]; NOp_data ~= gd.massf[gm.species_index("NO+")];
-        //e_data ~= gd.massf[gm.species_index("e-")];
-        //// Set the constant flow field values (just random for now)
-        //reactor.E_mag_p = 40000; // V/m
-        //reactor.v_elec_p = 1000.0; // m/s
-        //reactor.B_mag_p = 1.0; // T
-        //reactor.Qb_p = 1.0e4; // W/m3
-        //double[maxParams] params; // ignore
-        //foreach (i; 0 .. n_steps) {
-        //    reactor(gd, dt, dt, params);
-        //    // Log in the data
-        //    t_data ~= time;
-        //    T_data ~= gd.T;
-        //    Tve_data ~= gd.T_modes[0];
-        //    O_data ~= gd.massf[gm.species_index("O")];
-        //    N_data ~= gd.massf[gm.species_index("N")];
-        //    NO_data ~= gd.massf[gm.species_index("NO")];
-        //    N2_data ~= gd.massf[gm.species_index("N2")];
-        //    O2_data ~= gd.massf[gm.species_index("O2")];
-        //    Np_data ~= gd.massf[gm.species_index("N+")];
-        //    Op_data ~= gd.massf[gm.species_index("O+")];
-        //    O2p_data ~= gd.massf[gm.species_index("O2+")];
-        //    O2m_data ~= gd.massf[gm.species_index("O2-")];
-        //    N2p_data ~= gd.massf[gm.species_index("N2+")];
-        //    NOp_data ~= gd.massf[gm.species_index("NO+")];
-        //    e_data ~= gd.massf[gm.species_index("e-")];
-
-        //    time += dt;
-        //} // End loop
-        //File file = File("two_temperature_reacting_air_kinetics_test_results.data", "w");
-        //file.writeln("\"time (s)\", \"T (K)\", \"Tve (K)\", \"N mass fraction\", \"O mass fraction\", \"NO mass fraction\", \"N2 mass fraction\", \"O2 mass fraction\", \"N+ mass fraction\", \"O+ mass fraction\", \"O2+ mass fraction\", \"O2- mass fraction\", \"N2+ mass fraction\", \"NO+ mass fraction\", \"e- mass fraction\"");
-        //foreach (i; 0 .. t_data.length) {
-        //    file.writeln(format("%e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e", t_data[i], T_data[i], Tve_data[i], N_data[i], O_data[i], NO_data[i], N2_data[i], O2_data[i], Np_data[i], Op_data[i], O2p_data[i], O2m_data[i], N2p_data[i], NOp_data[i], e_data[i]));
-        //}
-        //file.close();
-        //// After relaxation, the two temperature types should be at equilibrium
-        //assert(isClose(gd.T, gd.T_modes[0], 50.0), failedUnitTest() ~ " : Thermal equilibrium not achieved, T = " ~ to!string(gd.T) ~ "K, Tve = " ~ to!string(gd.T_modes[0]) ~ "K");
-        //// Check for high levels of dissociation from O2 since we are at high temperatures
-        //assert(gd.massf[gm.species_index("O")] > 0.01, failedUnitTest() ~ "Expected oxygen dissociation did not occur, O mass fraction = " ~ to!string(gd.massf[gm.species_index("O")]));
-
-        // Special test to see how species behave in a low temperature but high energy 0D flow field chemical case
-        auto L = init_lua_State();
-        doLuaFile(L, "sample-input/two-temperature-reacting-air-model.lua");
-        auto gm = new TwoTemperatureReactingAir(L);
-        auto reactor = new LowTwoTemperatureAirKinetics("sample-input/two-temperature-reacting-air-model.lua", gm);
-        auto gd = GasState(gm);
-        
-        // Below is nonsensical oopsy
-        //gd.massf[gm.species_index("O2")] = 0.21*(1.0-2.0*Xi);
-        //gd.massf[gm.species_index("N2")] = 0.79*(1.0-2.0*Xi);
-        //gd.massf[gm.species_index("O2+")] = 0.21*Xi;
-        //gd.massf[gm.species_index("N2+")] = 0.79*Xi;
-        //gd.massf[gm.species_index("e-")] = Xi;
-
-        number dt = 1.0e-9; // Super small timestep since the kinetics will be super stiff
-        // If we do anything bigger than a nanosecond the stiffness of air chemical kinetics will (probably) push the test to failure?
-        number max_time = 25.0e-6; // 45 microseconds of simulation
-        int n_steps = to!int(max_time/dt + 1);
-
-        // Set the constant flow field values for different scenarios to see how the plasma behaves
-        number[4][4] test_cases; // Row 0-3 are the cases. Column 0 is E_mag_p (V/m), column 1 is v_elec_p (m/s), column 2 is B_mag_p (T), column 3 is Qb_p (W/m3)
-        // Case 1
-        test_cases[0][0] = 12500.0; test_cases[0][1] = 2000.0; test_cases[0][2] = 1.0; test_cases[0][3] = 30.0e06;
-        test_cases[1][0] = 15000.0; test_cases[1][1] = 2000.0; test_cases[1][2] = 1.0; test_cases[1][3] = 30.0e06;
-        test_cases[2][0] = 17500.0; test_cases[2][1] = 2000.0; test_cases[2][2] = 1.0; test_cases[2][3] = 30.0e06;
-        test_cases[3][0] = 20000.0; test_cases[3][1] = 2000.0; test_cases[3][2] = 1.0; test_cases[3][3] = 30.0e06;
-        foreach (testcase; 0 .. 4) {
-            writeln("Test case " ~ to!string(testcase) ~ " of 3");
-            reactor.E_mag_p = test_cases[testcase][0]; // V/m
-            reactor.v_elec_p = test_cases[testcase][1]; // m/s
-            reactor.B_mag_p = test_cases[testcase][2]; // T
-            reactor.Qb_p = test_cases[testcase][3]; // W/m3
-
-            // Set gas state initial conditions for each test
-            // We want slightly above room temp air and a massive amount of energy
-            gd.T = 500.0; // K (Room temperature (i.e. transrotational temperature))
-            gd.T_modes[0] = 500.0; // K (Vibroelectronic temperature)
-            gd.p = 2000.0; // Pa (Not sure why, this was just in one of Roshan's test cases - I believe it is tied to a Parent, 2016 test)
+        if ( unit_test_case == "relaxation") {
+            auto L = init_lua_State();
+            doLuaFile(L, "sample-input/two-temperature-reacting-air-model.lua");
+            auto gm = new TwoTemperatureReactingAir(L);
+            auto reactor = new LowTwoTemperatureAirKinetics("sample-input/two-temperature-reacting-air-model.lua", gm);
+            auto gd = GasState(gm);
+            // Nick Gibbons air chemistry test case
+            // We start with cold air, shocked to a high temperature but with a frozen air composition
+            // The system should relax toward equilibrium
+            gd.T = 12000.0; // K (Gas temperature post shock (i.e. transrotational temperature))
+            gd.T_modes[0] = 300.0; // K (Vibroelectronic temperature)
+            gd.p = 7.0 * 101.325e3; // Pa (7 atm)
 
             // Mass fractions
             gd.massf[] = 0.0;
-            number Xi = 1.0e-4; // Ionization factor
-
-            double W_e = 5.4858e-7;  // Electron molar mass, kg/mol
-            // Compute mixture molar mass the same way pfe.lua does
-            double M_mixt = 0.79*(1.0-2.0*Xi)*28.0e-3 + 0.21*(1.0-2.0*Xi)*32.0e-3
-                        + 0.79*Xi*28.0e-3 + 0.21*Xi*32.0e-3 + Xi*W_e;
-            // Compute mass fractions also the same way
-            gd.massf[gm.species_index("N2")]  = 0.79*(1.0-2.0*Xi) * 28.0e-3 / M_mixt;
-            gd.massf[gm.species_index("O2")]  = 0.21*(1.0-2.0*Xi) * 32.0e-3 / M_mixt;
-            gd.massf[gm.species_index("N2+")] = 0.79*Xi * 28.0e-3 / M_mixt;
-            gd.massf[gm.species_index("O2+")] = 0.21*Xi * 32.0e-3 / M_mixt;
-            gd.massf[gm.species_index("e-")]  = Xi * W_e / M_mixt;
+            gd.massf[gm.species_index("O2")] = 0.233;
+            gd.massf[gm.species_index("N2")] = 0.767;
 
             gm.update_thermo_from_pT(gd);
 
             // Initialise time loop
             number time = 0.0;
+            number dt = 5.0e-8; // mall timestep since the kinetics will be super stiff
+            // If we do anything bigger than a nanosecond the stiffness of air chemical kinetics will push the test to failure
+            number max_time = 60.0e-6; // 60 microseconds of simulation
+            int n_steps = to!int(max_time/dt + 1);
 
             // Initialise storage arrays and values for the storage arrays
-            number[] t_data, T_data, Tve_data, N_data, O_data, NO_data, N2_data, O2_data, Np_data, Op_data, O2p_data, O2m_data, N2p_data, NOp_data, e_data;
+            number[] t_data, T_data, Tve_data, N_data, O_data, NO_data, N2_data, O2_data;
             t_data ~= 0.0; T_data ~= gd.T; Tve_data ~= gd.T_modes[0]; N_data ~= gd.massf[gm.species_index("N")]; O_data ~= gd.massf[gm.species_index("O")];
             NO_data ~= gd.massf[gm.species_index("NO")]; N2_data ~= gd.massf[gm.species_index("N2")]; O2_data ~= gd.massf[gm.species_index("O2")];
-            Np_data ~= gd.massf[gm.species_index("N+")]; Op_data ~= gd.massf[gm.species_index("O+")]; O2p_data ~= gd.massf[gm.species_index("O2+")];
-            O2m_data ~= gd.massf[gm.species_index("O2-")]; N2p_data ~= gd.massf[gm.species_index("N2+")]; NOp_data ~= gd.massf[gm.species_index("NO+")];
-            e_data ~= gd.massf[gm.species_index("e-")];
-            
-            double[maxParams] params; // Ignore, is used in opCall but we use public variables instead
-                foreach (i; 0 .. n_steps) {
-                    reactor(gd, dt, dt, params);
-                    // Log the data
-                    t_data ~= time;
-                    T_data ~= gd.T;
-                    Tve_data ~= gd.T_modes[0];
-                    O_data ~= gd.massf[gm.species_index("O")];
-                    N_data ~= gd.massf[gm.species_index("N")];
-                    NO_data ~= gd.massf[gm.species_index("NO")];
-                    N2_data ~= gd.massf[gm.species_index("N2")];
-                    O2_data ~= gd.massf[gm.species_index("O2")];
-                    Np_data ~= gd.massf[gm.species_index("N+")];
-                    Op_data ~= gd.massf[gm.species_index("O+")];
-                    O2p_data ~= gd.massf[gm.species_index("O2+")];
-                    O2m_data ~= gd.massf[gm.species_index("O2-")];
-                    N2p_data ~= gd.massf[gm.species_index("N2+")];
-                    NOp_data ~= gd.massf[gm.species_index("NO+")];
-                    e_data ~= gd.massf[gm.species_index("e-")];
+            // Set the constant flow field values (just random for now)
+            reactor.E_mag_p = 40000; // V/m
+            reactor.v_elec_p = 1000.0; // m/s
+            reactor.B_mag_p = 1.0; // T
+            reactor.Qb_p = 1.0e4; // W/m3
+            double[maxParams] params; // ignore
+            foreach (i; 0 .. n_steps) {
+                reactor(gd, dt, dt, params);
+                // Log in the data
+                t_data ~= time;
+                T_data ~= gd.T;
+                Tve_data ~= gd.T_modes[0];
+                O_data ~= gd.massf[gm.species_index("O")];
+                N_data ~= gd.massf[gm.species_index("N")];
+                NO_data ~= gd.massf[gm.species_index("NO")];
+                N2_data ~= gd.massf[gm.species_index("N2")];
+                O2_data ~= gd.massf[gm.species_index("O2")];
 
-                    time += dt;
-                } // End time loop for specific test case
-            File file = File("two_temperature_reacting_air_kinetics_test_results_v" ~ to!string(testcase) ~".data", "w");
-            file.writeln("\"time (s)\", \"T (K)\", \"Tve (K)\", \"N mass fraction\", \"O mass fraction\", \"NO mass fraction\", \"N2 mass fraction\", \"O2 mass fraction\", \"N+ mass fraction\", \"O+ mass fraction\", \"O2+ mass fraction\", \"O2- mass fraction\", \"N2+ mass fraction\", \"NO+ mass fraction\", \"e- mass fraction\"");
+                time += dt;
+            } // End loop
+            File file = File("two_temperature_reacting_air_kinetics_test_results.data", "w");
+            file.writeln("\"time (s)\", \"T (K)\", \"Tve (K)\", \"N mass fraction\", \"O mass fraction\", \"NO mass fraction\", \"N2 mass fraction\", \"O2 mass fraction\"");
             foreach (i; 0 .. t_data.length) {
-                file.writeln(format("%e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e", t_data[i], T_data[i], Tve_data[i], N_data[i], O_data[i], NO_data[i], N2_data[i], O2_data[i], Np_data[i], Op_data[i], O2p_data[i], O2m_data[i], N2p_data[i], NOp_data[i], e_data[i]));
+                file.writeln(format("%e, %e, %e, %e, %e, %e, %e, %e", t_data[i], T_data[i], Tve_data[i], N_data[i], O_data[i], NO_data[i], N2_data[i], O2_data[i]));
             }
             file.close();
-        }
+            // After relaxation, the two temperature types should be at equilibrium
+            assert(isClose(gd.T, gd.T_modes[0], 50.0), failedUnitTest() ~ " : Thermal equilibrium not achieved, T = " ~ to!string(gd.T) ~ "K, Tve = " ~ to!string(gd.T_modes[0]) ~ "K");
+            // Check for high levels of dissociation from O2 since we are at high temperatures
+            assert(gd.massf[gm.species_index("O")] > 0.01, failedUnitTest() ~ "Expected oxygen dissociation did not occur, O mass fraction = " ~ to!string(gd.massf[gm.species_index("O")]));
+        } // End relaxation test case
+
+
+        else if ( unit_test_case == "energy investigation") {
+        // Special test to see how species behave in a low temperature but high energy 0D flow field chemical case
+            auto L = init_lua_State();
+            doLuaFile(L, "sample-input/two-temperature-reacting-air-model.lua");
+            auto gm = new TwoTemperatureReactingAir(L);
+            auto reactor = new LowTwoTemperatureAirKinetics("sample-input/two-temperature-reacting-air-model.lua", gm);
+            auto gd = GasState(gm);
+            
+            // Below is nonsensical oopsy
+            //gd.massf[gm.species_index("O2")] = 0.21*(1.0-2.0*Xi);
+            //gd.massf[gm.species_index("N2")] = 0.79*(1.0-2.0*Xi);
+            //gd.massf[gm.species_index("O2+")] = 0.21*Xi;
+            //gd.massf[gm.species_index("N2+")] = 0.79*Xi;
+            //gd.massf[gm.species_index("e-")] = Xi;
+
+            number dt = 1.0e-9; // Super small timestep since the kinetics will be super stiff
+            // If we do anything bigger than a nanosecond the stiffness of air chemical kinetics will (probably) push the test to failure?
+            number max_time = 25.0e-6; // 45 microseconds of simulation
+            int n_steps = to!int(max_time/dt + 1);
+
+            // Set the constant flow field values for different scenarios to see how the plasma behaves
+            number[4][4] test_cases; // Row 0-3 are the cases. Column 0 is E_mag_p (V/m), column 1 is v_elec_p (m/s), column 2 is B_mag_p (T), column 3 is Qb_p (W/m3)
+            // Case 1
+            test_cases[0][0] = 12500.0; test_cases[0][1] = 2000.0; test_cases[0][2] = 1.0; test_cases[0][3] = 30.0e06;
+            test_cases[1][0] = 15000.0; test_cases[1][1] = 2000.0; test_cases[1][2] = 1.0; test_cases[1][3] = 30.0e06;
+            test_cases[2][0] = 17500.0; test_cases[2][1] = 2000.0; test_cases[2][2] = 1.0; test_cases[2][3] = 30.0e06;
+            test_cases[3][0] = 20000.0; test_cases[3][1] = 2000.0; test_cases[3][2] = 1.0; test_cases[3][3] = 30.0e06;
+            foreach (testcase; 0 .. 4) {
+                writeln("Test case " ~ to!string(testcase) ~ " of 3");
+                reactor.E_mag_p = test_cases[testcase][0]; // V/m
+                reactor.v_elec_p = test_cases[testcase][1]; // m/s
+                reactor.B_mag_p = test_cases[testcase][2]; // T
+                reactor.Qb_p = test_cases[testcase][3]; // W/m3
+
+                // Set gas state initial conditions for each test
+                // We want slightly above room temp air and a massive amount of energy
+                gd.T = 500.0; // K (Room temperature (i.e. transrotational temperature))
+                gd.T_modes[0] = 500.0; // K (Vibroelectronic temperature)
+                gd.p = 2000.0; // Pa (Not sure why, this was just in one of Roshan's test cases - I believe it is tied to a Parent, 2016 test)
+
+                // Mass fractions
+                gd.massf[] = 0.0;
+                number Xi = 1.0e-4; // Ionization factor
+
+                double W_e = 5.4858e-7;  // Electron molar mass, kg/mol
+                // Compute mixture molar mass the same way pfe.lua does
+                double M_mixt = 0.79*(1.0-2.0*Xi)*28.0e-3 + 0.21*(1.0-2.0*Xi)*32.0e-3
+                            + 0.79*Xi*28.0e-3 + 0.21*Xi*32.0e-3 + Xi*W_e;
+                // Compute mass fractions also the same way
+                gd.massf[gm.species_index("N2")]  = 0.79*(1.0-2.0*Xi) * 28.0e-3 / M_mixt;
+                gd.massf[gm.species_index("O2")]  = 0.21*(1.0-2.0*Xi) * 32.0e-3 / M_mixt;
+                gd.massf[gm.species_index("N2+")] = 0.79*Xi * 28.0e-3 / M_mixt;
+                gd.massf[gm.species_index("O2+")] = 0.21*Xi * 32.0e-3 / M_mixt;
+                gd.massf[gm.species_index("e-")]  = Xi * W_e / M_mixt;
+
+                gm.update_thermo_from_pT(gd);
+
+                // Initialise time loop
+                number time = 0.0;
+
+                // Initialise storage arrays and values for the storage arrays
+                number[] t_data, T_data, Tve_data, N_data, O_data, NO_data, N2_data, O2_data, Np_data, Op_data, O2p_data, O2m_data, N2p_data, NOp_data, e_data;
+                t_data ~= 0.0; T_data ~= gd.T; Tve_data ~= gd.T_modes[0]; N_data ~= gd.massf[gm.species_index("N")]; O_data ~= gd.massf[gm.species_index("O")];
+                NO_data ~= gd.massf[gm.species_index("NO")]; N2_data ~= gd.massf[gm.species_index("N2")]; O2_data ~= gd.massf[gm.species_index("O2")];
+                Np_data ~= gd.massf[gm.species_index("N+")]; Op_data ~= gd.massf[gm.species_index("O+")]; O2p_data ~= gd.massf[gm.species_index("O2+")];
+                O2m_data ~= gd.massf[gm.species_index("O2-")]; N2p_data ~= gd.massf[gm.species_index("N2+")]; NOp_data ~= gd.massf[gm.species_index("NO+")];
+                e_data ~= gd.massf[gm.species_index("e-")];
+                
+                double[maxParams] params; // Ignore, is used in opCall but we use public variables instead
+                    foreach (i; 0 .. n_steps) {
+                        reactor(gd, dt, dt, params);
+                        // Log the data
+                        t_data ~= time;
+                        T_data ~= gd.T;
+                        Tve_data ~= gd.T_modes[0];
+                        O_data ~= gd.massf[gm.species_index("O")];
+                        N_data ~= gd.massf[gm.species_index("N")];
+                        NO_data ~= gd.massf[gm.species_index("NO")];
+                        N2_data ~= gd.massf[gm.species_index("N2")];
+                        O2_data ~= gd.massf[gm.species_index("O2")];
+                        Np_data ~= gd.massf[gm.species_index("N+")];
+                        Op_data ~= gd.massf[gm.species_index("O+")];
+                        O2p_data ~= gd.massf[gm.species_index("O2+")];
+                        O2m_data ~= gd.massf[gm.species_index("O2-")];
+                        N2p_data ~= gd.massf[gm.species_index("N2+")];
+                        NOp_data ~= gd.massf[gm.species_index("NO+")];
+                        e_data ~= gd.massf[gm.species_index("e-")];
+
+                        time += dt;
+                    } // End time loop for specific test case
+                File file = File("two_temperature_reacting_air_kinetics_test_results_v" ~ to!string(testcase) ~".data", "w");
+                file.writeln("\"time (s)\", \"T (K)\", \"Tve (K)\", \"N mass fraction\", \"O mass fraction\", \"NO mass fraction\", \"N2 mass fraction\", \"O2 mass fraction\", \"N+ mass fraction\", \"O+ mass fraction\", \"O2+ mass fraction\", \"O2- mass fraction\", \"N2+ mass fraction\", \"NO+ mass fraction\", \"e- mass fraction\"");
+                foreach (i; 0 .. t_data.length) {
+                    file.writeln(format("%e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e, %e", t_data[i], T_data[i], Tve_data[i], N_data[i], O_data[i], NO_data[i], N2_data[i], O2_data[i], Np_data[i], Op_data[i], O2p_data[i], O2m_data[i], N2p_data[i], NOp_data[i], e_data[i]));
+                }
+                file.close();
+            }
+        } // End energy investigation test case
+
+        else {throw new Exception("Invalid low temperature air plasma test case");}
     } // end main()
 } // end two_temperature_reacting_air_kinetics_test

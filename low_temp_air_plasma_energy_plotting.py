@@ -1,5 +1,5 @@
 """
-File which takes in the 4 data sets from one of the low_two_temperature_reacting_air_kinetics.d unit tests.
+File which takes in the 4 data sets from the low_two_temperature_reacting_air_kinetics.d energy investigation unit test.
 Change DATA_DIR to whatever directory will contain said .data files (for windows systems using WSL, it will most
 likely be easier if you save (in the unit test main()) them to the kinetics file in the gdtk)
 """
