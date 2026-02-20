@@ -2,6 +2,7 @@
 
 ## Prerequisites:
 NOTE - The low temperature air plasma model was developed in Eilmer Version 4.1.0, if you wish to convert the files to Eilmer Version 5.0.0 (lmr), you will need to make the conversions yourself (sorry)
+
 It is presumed you have Eilmer installed on your device and all of its prerequisites, the below prerequisites are additional to the base Eilmer model:
 - Gas-dynamic library
 
@@ -12,12 +13,17 @@ It is presumed you have Eilmer installed on your device and all of its prerequis
 
 ## To run the unit tests:
 Copy the kinetics file into ```gdtk/src/kinetics```
+
 Copy the gas file into ```gdtk/src/gas```
-Copy the .lua files in this repository (in ```sample-data``` and ```sample-input```) into their respective gas and kinetics sample-data and sample-input directories, the unit tests will refer to them. Ensure you chooseyour kinetics ODE method, only Forward Euler and Runge Kutta 4 are implemented, a Backward Euler was not implemented purely since time was of the essence in this project and we have a state vector with 12 variables
+
+Copy the .lua files in this repository (in ```sample-data``` and ```sample-input```) into their respective gas and kinetics sample-data and sample-input directories, the unit tests will refer to them. Ensure you choose your kinetics ODE method, only Forward Euler and Runge Kutta 4 are implemented, a Backward Euler was not implemented purely since time was of the essence in this project and we have a state vector with 12 variables
 Choose your case (relaxation or energy investigation)
+
 In your linux environment, move to the kinetics directory (```$ cd gdtk/src/kinetics```) and run all kinetics tests (```$ make test```) which will run through all of the kinetics file tests
+
 ## To use the plotting scripts:
 If you used the relaxation test case, run the ```low_temp_air_plasma_relaxation_plotting.py``` script
+
 If you used the energy investigation test case, run the ```low_temp_air_plasma_energy_plotting.py``` script
 
 ## Version updates:
