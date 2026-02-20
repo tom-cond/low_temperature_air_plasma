@@ -1,0 +1,222 @@
+diff --git a/src/eilmer/globalconfig.d b/src/eilmer/globalconfig.d
+index 2fc38bf2..51c46827 100644
+--- a/src/eilmer/globalconfig.d
++++ b/src/eilmer/globalconfig.d
+@@ -1775,6 +1775,7 @@ import gas.uniform_lut;
+ import gas.adaptive_lut_CEA;
+ import gas.ideal_gas_ab;
+ import gas.two_temperature_reacting_argon;
++import gas.low_two_temperature_reacting_air;
+ import gas.ideal_dissociating_gas;
+ import gas.two_temperature_air;
+ import gas.two_temperature_nitrogen;
+@@ -1822,6 +1823,7 @@ void set_config_for_core(JSONValue jsonData)
+         if (cast(UniformLUT)gm) { multiSpecies = false; }
+         if (cast(AdaptiveLUT)gm) { multiSpecies = false; }
+         if (cast(TwoTemperatureReactingArgon)gm) { multiT = true; }
++        if (cast(TwoTemperatureReactingAir)gm) { multiT = true; }
+         if (cast(TwoTemperatureAir)gm) { multiT = true; }
+         if (cast(TwoTemperatureNitrogen)gm) { multiT = true; }
+         if (cast(TwoTemperatureGasGiant)gm) { multiT = true; }
+diff --git a/src/gas/gas-package-test.tcl b/src/gas/gas-package-test.tcl
+index 33443b09..c88b18e1 100755
+--- a/src/gas/gas-package-test.tcl
++++ b/src/gas/gas-package-test.tcl
+@@ -127,6 +127,10 @@ test two-temperature-gasgiant-test {Testing Daisy's two-T H2-He gas model} -body
+     exec ./two_temperature_gasgiant_test
+ } -result {} -returnCodes {0}
+ 
++test two-temperature-reacting-air-test {Testing Tom Condon's two-T low temperature reacting air gas model} -body {
++    exec ./two_temperature_reacting_air_test
++} -result {} -returnCodes {0}
++
+ puts "-------------------------------------"
+ puts "   thermo/ tests"
+ puts "-------------------------------------"
+diff --git a/src/gas/gas_files.mk b/src/gas/gas_files.mk
+index f95be4d1..08198dd9 100644
+--- a/src/gas/gas_files.mk
++++ b/src/gas/gas_files.mk
+@@ -30,7 +30,8 @@ GAS_MODEL_FILES := $(GAS_DIR)/package.d \
+ 	$(GAS_DIR)/vib_specific_co.d \
+ 	$(GAS_DIR)/fuel_air_mix.d \
+ 	$(GAS_DIR)/equilibrium_gas.d \
+-	$(GAS_DIR)/two_temperature_gasgiant.d
++	$(GAS_DIR)/two_temperature_gasgiant.d \
++	$(GAS_DIR)/low_two_temperature_reacting_air.d
+ 
+ THERMO_FILES := $(GAS_DIR)/thermo/package.d \
+ 	$(GAS_DIR)/thermo/cea_thermo_curves.d \
+diff --git a/src/gas/init_gas_model.d b/src/gas/init_gas_model.d
+index 02b6c418..04789f09 100644
+--- a/src/gas/init_gas_model.d
++++ b/src/gas/init_gas_model.d
+@@ -26,6 +26,7 @@ import gas.adaptive_lut_CEA;
+ import gas.ideal_gas_ab;
+ import gas.two_temperature_reacting_argon;
+ import gas.two_temperature_argon_plus_ideal;
++import gas.low_two_temperature_reacting_air: TwoTemperatureReactingAir;
+ import gas.ideal_dissociating_gas;
+ import gas.two_temperature_air;
+ import gas.two_temperature_nitrogen;
+@@ -123,6 +124,9 @@ GasModel init_gas_model(string file_name="gas-model.lua")
+         case "TwoTemperatureArgonPlusIdealGas":
+             gm = new TwoTemperatureArgonPlusIdealGas(L);
+             break;
++        case "TwoTemperatureReactingAir":
++            gm = new TwoTemperatureReactingAir(L);
++            break;
+         case "IdealDissociatingGas":
+             gm = new IdealDissociatingGas(L);
+             break;
+diff --git a/src/gas/makefile b/src/gas/makefile
+index ac3fd24a..4d774fc6 100644
+--- a/src/gas/makefile
++++ b/src/gas/makefile
+@@ -35,7 +35,8 @@ TEST_PROGRAMS := chemkin_therm_cond_test chemkin_viscosity_test cea_therm_cond_t
+ 	init_gas_model_complex_test ideal_gas_complex_test cea_thermo_curves_complex_test \
+ 	vib_specific_nitrogen_test vib_specific_co_test \
+ 	vib_specific_co_mixture_test \
+-	two_temperature_gasgiant_test multi_temperature_gas_test
++	two_temperature_gasgiant_test multi_temperature_gas_test \
++	two_temperature_reacting_air_test
+ 
+ LUA_DIR := ../../extern/lua-5.4.3
+ LIBLUA := $(LUA_DIR)/install/lib/liblua.a
+@@ -201,6 +202,7 @@ clean:
+ 	- rm -f ./uniform-lut-plus-ideal-air-gas-model.lua
+ 	- rm -f ./two-temperature-reacting-argon-model.lua
+ 	- rm -f ./two-temperature-argon-plus-ideal-air-gas-model.lua
++	- rm -f ./two-temperature-reacting-air-model.lua
+ 	- rm -f ./diffusion/*.o ./diffusion/*.obj
+ 	- rm -f ./thermo/*.o ./thermo/*.obj
+ 	- rm -f $(GASDYN_DIR)/*.o $(GASDYN_DIR)/*.obj
+@@ -592,6 +594,14 @@ two_temperature_reacting_argon_test: $(GAS_FILES) $(GAS_LUA_FILES) $(EQC_SRC_FIL
+ 		$(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
+ 		$(LIBEQC) $(LIBLUA) $(DLINKFLAGS)
+ 
++two_temperature_reacting_air_test: $(GAS_FILES) $(GAS_LUA_FILES) $(EQC_SRC_FILES) \
++	$(KINETICS_FILES) $(KINETICS_LUA_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
++	$(LIBEQC) $(LIBLUA)
++	$(DMD) $(OF)$@ $(DFLAGS) $(DVERSION)$@ \
++		$(GAS_FILES) $(GAS_LUA_FILES) $(EQC_SRC_FILES) $(KINETICS_FILES) $(KINETICS_LUA_FILES) \
++		$(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
++		$(LIBEQC) $(LIBLUA) $(DLINKFLAGS)
++
+ two_temperature_argon_plus_ideal_test: $(GAS_FILES) $(GAS_LUA_FILES) $(EQC_SRC_FILES) \
+ 	$(KINETICS_FILES) $(KINETICS_LUA_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
+ 	$(LIBEQC) $(LIBLUA)
+diff --git a/src/gas/two_temperature_reacting_argon.d b/src/gas/two_temperature_reacting_argon.d
+index 46e501cb..263e1c9d 100644
+--- a/src/gas/two_temperature_reacting_argon.d
++++ b/src/gas/two_temperature_reacting_argon.d
+@@ -241,7 +241,7 @@ version(two_temperature_reacting_argon_test) {
+         assert(gm.n_species == 3, failedUnitTest());
+         assert(isClose(gd.p, 1.0e5, 1.0e-6), failedUnitTest());
+         assert(isClose(gd.T, 300.0, 1.0e-6), failedUnitTest());
+-        assert(isClose(gd.massf[Species.Ar], 1.0, 1.0e-6), failedUnitTest());
++        assert(isClose(gd.massf[Species.Ar], 110.0, 1.0e-6), failedUnitTest());
+         assert(isClose(gd.massf[Species.Ar_plus], 0.0, 1.0e-6), failedUnitTest());
+         assert(isClose(gd.massf[Species.e_minus], 0.0, 1.0e-6), failedUnitTest());
+ 
+diff --git a/src/kinetics/init_thermochemical_reactor.d b/src/kinetics/init_thermochemical_reactor.d
+index 29a16f74..6cbfa49e 100644
+--- a/src/kinetics/init_thermochemical_reactor.d
++++ b/src/kinetics/init_thermochemical_reactor.d
+@@ -30,6 +30,7 @@ import gas.vib_specific_nitrogen;
+ import gas.vib_specific_co;
+ import gas.two_temperature_air;
+ import gas.two_temperature_gasgiant;
++import gas.low_two_temperature_reacting_air;
+ 
+ import kinetics.chemistry_update;
+ import kinetics.equilibrium_update;
+@@ -46,6 +47,7 @@ import kinetics.vib_specific_nitrogen_kinetics;
+ import kinetics.vib_specific_co_kinetics;
+ import kinetics.two_temperature_air_kinetics;
+ import kinetics.two_temperature_gasgiant_kinetics;
++import kinetics.low_two_temperature_reacting_air_kinetics;
+ 
+ 
+ ThermochemicalReactor init_thermochemical_reactor(GasModel gmodel, string fileName1="", string fileName2="")
+@@ -100,6 +102,9 @@ ThermochemicalReactor init_thermochemical_reactor(GasModel gmodel, string fileNa
+     if ((cast(TwoTemperatureReactingArgon) gmodel) !is null) {
+         reactor = new UpdateArgonFrac(fileName1, gmodel);
+     }
++    if ((cast(TwoTemperatureReactingAir) gmodel) !is null) {
++        reactor = new LowTwoTemperatureAirKinetics(fileName1, gmodel);
++    }
+     if ((cast(TwoTemperatureArgonPlusIdealGas) gmodel) !is null) {
+         reactor = new UpdateArgonFracWithIdeal(fileName1, gmodel);
+     }
+diff --git a/src/kinetics/kinetics-package-test.tcl b/src/kinetics/kinetics-package-test.tcl
+index aafdb831..047e73a8 100755
+--- a/src/kinetics/kinetics-package-test.tcl
++++ b/src/kinetics/kinetics-package-test.tcl
+@@ -32,6 +32,10 @@ test two-temperature-argon-kinetics-test {Testing Daniel Smith's two-temperature
+     exec ./two_temperature_argon_kinetics_test
+ } -result {} -returnCodes {0}
+ 
++test two-temperature-reacting-air-kinetics-test {Testing Tom Cond's two-temperature reacting air reaction mechanism.} -body {
++    exec ./two_temperature_reacting_air_kinetics_test
++} -result {} -returnCodes {0}
++
+ test vib-specific-CO-kientics-test {Testing Nick Gibbons implementation of a state-specific carbon monoxide model.} -body {
+     exec ./two_temperature_argon_kinetics_test
+ } -result {} -returnCodes {0}
+diff --git a/src/kinetics/kinetics_files.mk b/src/kinetics/kinetics_files.mk
+index 409ccc5f..c770b558 100644
+--- a/src/kinetics/kinetics_files.mk
++++ b/src/kinetics/kinetics_files.mk
+@@ -24,7 +24,9 @@ KINETICS_FILES := $(KINETICS_DIR)/package.d \
+ 	$(KINETICS_DIR)/two_temperature_dissociating_nitrogen_kinetics.d \
+ 	$(KINETICS_DIR)/vib_specific_nitrogen_kinetics.d \
+ 	$(KINETICS_DIR)/vib_specific_co_kinetics.d \
+-	$(KINETICS_DIR)/two_temperature_gasgiant_kinetics.d
++	$(KINETICS_DIR)/two_temperature_gasgiant_kinetics.d \
++	$(KINETICS_DIR)/low_two_temperature_reacting_air_kinetics.d
++	
+ 
+ KINETICS_LUA_FILES := $(KINETICS_DIR)/luathermochemical_reactor.d \
+ 	$(KINETICS_DIR)/luachemistry_update.d \
+diff --git a/src/kinetics/makefile b/src/kinetics/makefile
+index e92cde35..ef1ddc57 100644
+--- a/src/kinetics/makefile
++++ b/src/kinetics/makefile
+@@ -23,7 +23,8 @@ TEST_PROGRAMS := chemistry_update_test \
+ 		vib_specific_co_kinetics_test \
+ 		vib_specific_co_mixture_kinetics_test \
+ 		two_temperature_argon_with_ideal_gas_test \
+-		two_temperature_gasgiant_kinetics_test
++		two_temperature_gasgiant_kinetics_test \
++		two_temperature_reacting_air_kinetics_test
+ 
+ NTYPES_DIR := ../ntypes
+ NTYPES_FILES := $(NTYPES_DIR)/complex.d
+@@ -78,6 +79,11 @@ clean:
+ 	- rm -f *.o *.mod *.obj
+ 	- rm -f $(TEST_PROGRAMS)
+ 	- rm -f two_temperature_argon_kinetics_test_results.data
++	- rm -f two_temperature_reacting_air_kinetics_test_results.data
++	- rm -f two_temperature_reacting_air_kinetics_test_results_v0.data
++	- rm -f two_temperature_reacting_air_kinetics_test_results_v1.data
++	- rm -f two_temperature_reacting_air_kinetics_test_results_v2.data
++	- rm -f two_temperature_reacting_air_kinetics_test_results_v3.data
+ 	- rm -rf $(BUILD_DIR)/*
+ 	- cd $(LUA_DIR); make clean
+ 	- cd $(EQC_DIR); make clean
+@@ -136,6 +142,14 @@ two_temperature_argon_kinetics_test:  $(KINETICS_FILES) $(GAS_FILES) $(EQC_SRC_F
+ 		$(KINETICS_LUA_FILES) $(GAS_LUA_FILES) \
+ 		$(LIBEQC) $(LIBLUA) $(DLINKFLAGS)
+ 
++two_temperature_reacting_air_kinetics_test:  $(KINETICS_FILES) $(GAS_FILES) $(EQC_SRC_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
++	$(KINETICS_LUA_FILES) $(GAS_LUA_FILES) \
++	$(LIBEQC) $(LIBLUA)
++	ldmd2 -of$@ -debug -g -dip1008 -version=$@ \
++		$(KINETICS_FILES) $(GAS_FILES) $(EQC_SRC_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
++		$(KINETICS_LUA_FILES) $(GAS_LUA_FILES) \
++		$(LIBEQC) $(LIBLUA) $(DLINKFLAGS)
++
+ vib_specific_co_kinetics_test: $(KINETICS_FILES) $(GAS_FILES) $(EQC_SRC_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
+ 	$(KINETICS_LUA_FILES) $(GAS_LUA_FILES) \
+ 	$(LIBEQC) $(LIBLUA)

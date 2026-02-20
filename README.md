@@ -1,12 +1,14 @@
-Low Temperature Air Plasma README
+title: "Low Temperature Air Plasma README"
 
     Prerequisites:
         NOTE - The low temperature air plasma model was developed in Eilmer Version 4.1.0, if you wish to convert the files to Eilmer Version 5.0.0 (lmr),
             you will need to make the conversions yourself (sorry)
         It is presumed you have Eilmer installed on your device and all of its prerequisites, the below prerequisites are additional to the base Eilmer model:
             - Gas-dynamic library
+                ```
                 $ cd gdtk/src/gas 
-                $ make install 
+                $ make install
+                ```
     
     Additions to the source code:
         In gdtk/src/eilmer/globalconfig.d 

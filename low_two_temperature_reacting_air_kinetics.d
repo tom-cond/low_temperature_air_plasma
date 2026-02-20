@@ -32,7 +32,7 @@ import kinetics.thermochemical_reactor;
 final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
     // Add public member variables which are relevant for the reaction rates, for users to populate
     public double E_mag_p = 0.0; // Electric Field (V/m)
-    public double v_elec_p = 0.0; // Electron Velocity (m/s)
+    public double bulk_v_elec_p = 0.0; // Electron Velocity (m/s)
     public double B_mag_p = 0.0; // Magnetic Field (T)
     public double Qb_p = 0.0; // (W/m^3)
 
@@ -81,7 +81,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         lua_close(L);
     }
 
-    // It is expected that params[0] is the electric field magnitude E, params[1] is the electron velocity in the electric field v_elec
+    // It is expected that params[0] is the electric field magnitude E, params[1] is the electron velocity in the electric field bulk_v_elec
     // params[2] is the magnetic field magnitude B, and params[3] is the electron beam power per unit volume Qb
     // These positions are an interface requirement for this 'self-contained' hard-coded model for explicit uses
     // Further changes will be made to generalise this model such that Carolyn J. can use it easily (hopefully)
@@ -102,7 +102,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
 
             // Pull in the values from the public 'this' function thing
             number E_mag = to!number(this.E_mag_p); // Electric Field (V/m)
-            number v_elec = to!number(this.v_elec_p); // Electron Velocity (m/s)
+            number bulk_v_elec = to!number(this.bulk_v_elec_p); // Electron Velocity (m/s)
             number B_mag = to!number(this.B_mag_p); // Magnetic Field (T)
             number Qb = to!number(this.Qb_p); // (W/m^3)
 
@@ -155,13 +155,13 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
 
             // Calculate necessary characteristics of the plasma for the rate coefficients
             // E* = |E + Ve x B|/N
-            number E_star = (E_mag + (v_elec * B_mag)) / N_plasma; // Reduced effective electric field in electron reference frame (Vm^2)
+            number E_star = (E_mag + (bulk_v_elec * B_mag)) / N_plasma; // Reduced effective electric field in electron reference frame (Vm^2)
             // Qb* = Qb/N
             number Qb_star = Qb / N_plasma; // Ratio between electron beam power per unit volume and total number density of plasma (W)
 
             // Start with the suggested time step size
             int NumberSteps = cast(int) fmax(floor(tInterval/dtSuggest), 1.0);
-            number[13] S;
+            number[12] S;
             int integration_attempt = 0;
             bool finished_integration = false;
 
@@ -184,52 +184,75 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                     S[9] = initial_n_N2p;
                     S[10] = initial_n_NO;
                     S[11] = initial_translational_energy;
-                    S[12] = initial_vibrational_energy;
 
                     switch (_integration_method) {
                     case "Forward_Euler":
                         foreach (n; 0 .. NumberSteps) {
-                            number[13] myF = F(S, Q, E_star, Qb_star, v_elec, N_plasma);
-                            foreach (i; 0 .. 13) {
+                            // F calls update_reaction_rate which will set recent_eer (elastic energy rate)
+                            number[12] myF = F(S, Q, E_star, Qb_star, N_plasma);
+                            foreach (i; 0 .. 12) {
                                 S[i] += _chem_dt * myF[i];
                             }
+
+                            // Since the test cases are 0D, and the power deposition of the beam is constantly applied to this box,
+                            // the beam energy should probably be influencing the total energy of the actual gas in this reactor.
+                            // In one of the old pfe job scripts and source term file, it is said that there is energy addition because there is electron additions
+                            // NOTE, COMMENT THE BELOW LINE OUT WHEN DOING ACTUAL SIMULATIONS, THE SOURCE TERM FILE SHOULD ACCOUNT FOR THIS ITSELF
+                            u_total += (Qb / Q.rho + recent_eer / Q.rho) * _chem_dt;
+
+                            // Update Q to reflect the new energy transrotational energy
+                            update_Q_from_state_vector(S, Q, E_star, N_plasma);
+
                             if (!state_vector_is_within_limits(S)) {
                                 string msg = "State vector not within limits";
-                                debug { msg ~= format("\n   y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11], S[12]); }
+                                debug { msg ~= format("\n   y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11]); }
                                 throw new ThermochemicalReactorUpdateException(msg);
                             }
                         } // end foreach n
                         break;
                     case "RK4": // Same as argon RK4 but with more care around the energy exchange
-                        number [13] k1, k2_in, k2, k3_in, k3, k4_in, k4;
+                        number [12] k1, k2_in, k2, k3_in, k3, k4_in, k4;
                         foreach (n; 0 .. NumberSteps) {
-                            number[13] myF = F(S, Q, E_star, Qb_star, v_elec, N_plasma);
-                            foreach (i; 0 .. 13) { k1[i] = _chem_dt * myF[i]; }
+                            // Store the initial energy and density
+                            number u_total_initial = u_total;
+                            number rho_initial = Q.rho;
+
+                            // Start RK4
+                            number[12] myF = F(S, Q, E_star, Qb_star, N_plasma);
+
+                            // Store the initial eer after updating the state vector with F()
+                            number eer_initial = recent_eer;
+
+                            foreach (i; 0 .. 12) { k1[i] = _chem_dt * myF[i]; }
                             foreach (i; 0 .. 11) { k2_in[i] = fmax(S[i] + k1[i]/2.0, 0.0); }
                             k2_in[11] = S[11] + k1[11]/2.0;
-                            k2_in[12] = S[12] + k1[12]/2.0;
                             //foreach (i; 0 .. 13) { k2_in[i] = S[i] + k1[i]/2.0; }
-                            myF = F(k2_in, Q, E_star, Qb_star, v_elec, N_plasma);
-                            foreach (i; 0 .. 13) { k2[i] = _chem_dt * myF[i]; }
+                            myF = F(k2_in, Q, E_star, Qb_star, N_plasma);
+                            foreach (i; 0 .. 12) { k2[i] = _chem_dt * myF[i]; }
                             foreach (i; 0 .. 11) { k3_in[i] = fmax(S[i] + k2[i]/2.0, 0.0); }
                             k3_in[11] = S[11] + k2[11]/2.0;
-                            k3_in[12] = S[12] + k2[12]/2.0;
                             //foreach (i; 0 .. 13) { k3_in[i] = S[i] + k2[i]/2.0; }
-                            myF = F(k3_in, Q, E_star, Qb_star, v_elec, N_plasma);
-                            foreach (i; 0 .. 13) { k3[i] = _chem_dt * myF[i]; }
+                            myF = F(k3_in, Q, E_star, Qb_star, N_plasma);
+                            foreach (i; 0 .. 12) { k3[i] = _chem_dt * myF[i]; }
                             foreach (i; 0 .. 11) { k4_in[i] = fmax(S[i] + k3[i], 0.0); }
                             k4_in[11] = S[11] + k3[11];
-                            k4_in[12] = S[12] + k3[12];
                             //foreach (i; 0 .. 13) { k4_in[i] = S[i] + k3[i]; }
-                            myF = F(k4_in, Q, E_star, Qb_star, v_elec, N_plasma);
-                            foreach (i; 0 .. 13) { k4[i] = _chem_dt * myF[i]; }
-                            foreach (i; 0 .. 11) { S[i] += fmax(1.0/6.0*(k1[i]+2.0*k2[i]+2.0*k3[i]+k4[i]), 0.0); }
+                            myF = F(k4_in, Q, E_star, Qb_star, N_plasma);
+                            foreach (i; 0 .. 12) { k4[i] = _chem_dt * myF[i]; }
+                            foreach (i; 0 .. 11) { S[i] = fmax(S[i] + 1.0/6.0*(k1[i]+2.0*k2[i]+2.0*k3[i]+k4[i]), 0.0); }
                             S[11] += 1.0/6.0*(k1[11]+2.0*k2[11]+2.0*k3[11]+k4[11]);
-                            S[12] += 1.0/6.0*(k1[12]+2.0*k2[12]+2.0*k3[12]+k4[12]);
                             //foreach (i; 0 .. 13) { S[i] += 1.0/6.0*(k1[i]+2.0*k2[i]+2.0*k3[i]+k4[i]); }
+
+                            // Follow the same energy increase as in the forward euler case
+                            // NOTE, COMMENT THE BELOW LINE OUT WHEN DOING ACTUAL SIMULATIONS, THE SOURCE TERM FILE SHOULD ACCOUNT FOR THIS ITSELF
+                            u_total = u_total_initial + (Qb / rho_initial + eer_initial / rho_initial) * _chem_dt;
+
+                            // Update Q to reflect the new energy transrotational energy
+                            update_Q_from_state_vector(S, Q, E_star, N_plasma);
+
                             if (!state_vector_is_within_limits(S)) {
                                 string msg = "State vector not within limits";
-                                debug { msg ~= format("\n    y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11], S[12]); }
+                                debug { msg ~= format("\n    y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11]); }
                                 throw new ThermochemicalReactorUpdateException(msg);
                             }
                         } // end foreach n
@@ -249,15 +272,21 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                     n_N2  = fmax(S[8], 0.0);
                     n_N2p = fmax(S[9], 0.0);
                     n_NO  = fmax(S[10], 0.0);
-                    Q.u_modes[0] = fmin(S[12], u_total);
-                    Q.u = fmax(u_total - Q.u_modes[0], 0.0); // Energy conservation
+                    //Q.u_modes[0] = fmin(S[12], u_total);
+                    //Q.u = fmax(u_total - Q.u_modes[0], 0.0); // Energy conservation
+                    // The above cases were done before I realised I need to reference the energy !
+                    //Q.u_modes[0] = S[12];
+                    //Q.u = u_total - Q.u_modes[0]; // REMOVED AGAIN MY GOODNESS, BROUGHT BACK, was REMOVED because I was getting odd behaviour from the transrotational temperature
+                    Q.u = S[11];
+                    Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
 
                     // Reconstruct the other parts of the flow state
                     // Utilise charge neutrality
                     //n_NOp = (-1.0*n_e) + n_Op + n_O2p - n_O2m + n_Np + n_N2p;
                     n_NOp = n_e + n_O2m - n_Op - n_O2p - n_Np - n_N2p;
+                    if (n_NOp < 0.0) { n_NOp = to!number(0.0); }
                 
-                    // Now to update the mass fractions, the electron temperature, thermodyanmic behaviour of the gas, and the sound speed !
+                    // Now to update the mass fractions, the electron temperature, thermodynamic behaviour of the gas, and the sound speed !
                     numden[i_e] = n_e; numden[i_O] = n_O; numden[i_Op] = n_Op; numden[i_O2] = n_O2;
                     numden[i_O2p] = n_O2p; numden[i_O2m] = n_O2m; numden[i_N] = n_N; numden[i_Np] = n_Np;
                     numden[i_N2] = n_N2; numden[i_N2p] = n_N2p; numden[i_NO] = n_NO; numden[i_NOp] = n_NOp;
@@ -283,9 +312,8 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                     //    // Run the updates again
                     //    _gmodel.update_thermo_from_rhou(Q);
                     //    _gmodel.update_sound_speed(Q);
-                    //}
+                    //} Removed since this is an artefact of old code issues, but only commented out so developers can understand my code design process
                     
-
                     finished_integration = true;
                     //if (integration_attempt == 1) {
                     //    // Success on the first attempt so increase the time step a little for the next call
@@ -305,7 +333,6 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                     }
                 }
             } // End while !finished_integration
-
             // Remember the size of the successful time step for the next call
             dtSuggest = _chem_dt;
         } // end if the neutrals temperature is less than the temperature required for reactions
@@ -316,7 +343,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
     {
         // Pull in the values from the public 'this' function thing
         number E_mag = to!number(this.E_mag_p); // Electric Field (V/m)
-        number v_elec = to!number(this.v_elec_p); // Electron Velocity (m/s)
+        number bulk_v_elec = to!number(this.bulk_v_elec_p); // Electron Velocity (m/s)
         number B_mag = to!number(this.B_mag_p); // Magnetic Field (T)
         number Qb = to!number(this.Qb_p); // (W/m^3)
 
@@ -344,18 +371,17 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         }
 
         // Determine the reduced versions like before
-        number E_star = (E_mag + (v_elec * B_mag)) / N_plasma;
+        number E_star = (E_mag + (bulk_v_elec * B_mag)) / N_plasma;
         number Qb_star = Qb / N_plasma;
 
         // Determine the necessary rates to update the source terms
-        number[13] myF = update_reaction_rates(Q, E_star, Qb_star, v_elec);
+        number[12] myF = update_reaction_rates(Q, E_star, Qb_star);
         number energy_leaving_trans = myF[11];
-        number energy_entering_vib = myF[12];
 
-        
         // Map the local enum indicies to Eilmer's dynamic indices and convert dn/dt
         // to the species production rates (kg/(s*m^3)) if the temperature is hot enough
         if (Q.T > _T_min_for_reaction) {
+            // Species production rate source terms
             number production_rate_sum = 0.0;
             source[i_e]   = myF[SRT_e]   * _gmodel.mol_masses[i_e]   / AvN;
             production_rate_sum += source[i_e];
@@ -380,44 +406,24 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
             source[i_NO]  = myF[SRT_NO]  * _gmodel.mol_masses[i_NO]  / AvN;
             production_rate_sum += source[i_NO];
             source[i_NOp] = -1.0 * production_rate_sum; // The sum of all species production rates must be 0 due to mass conservation.
-            source[12] = energy_leaving_trans;
-            source[13] = energy_entering_vib;
+            // Energy source terms
+            source[12] = energy_leaving_trans * Q.rho; // Convert to W/m^3
+            source[13] = (Qb + recent_eer) - source[12]; // Energy conservation for the vibroelectronic energy, hopefully interfaces okay with source term file?
+            // Fairly certain the source term file will account for this for the kinetics file, so simply get rid of the Qb term in that line
         } else {
-            source[i_e]   = 0.0;
-            source[i_O]   = 0.0;
-            source[i_Op]  = 0.0;
-            source[i_O2]  = 0.0;
-            source[i_O2p] = 0.0;
-            source[i_O2m] = 0.0;
-            source[i_N]   = 0.0;
-            source[i_Np]  = 0.0;
-            source[i_N2]  = 0.0;
-            source[i_N2p] = 0.0;
-            source[i_NO]  = 0.0;
-            source[i_NOp] = 0.0;
-            source[12] = 0.0;
-            source[13] = 0.0;
+            foreach (i; 0 .. 14) { source[i] = 0.0; }
         }
     }
 
     private:
     @nogc
-    number[13] F(ref const(number[13]) S, ref GasState Q, number E_star, number Qb_star, number v_elec, number N_plasma) {
+    number[12] F(ref const(number[12]) S, ref GasState Q, number E_star, number Qb_star, number N_plasma) {
         update_Q_from_state_vector(S, Q, E_star, N_plasma); // Update the gas state
-        return update_reaction_rates(Q, E_star, Qb_star, v_elec); // Update the rates based on this gas state and feed it back
+        return update_reaction_rates(Q, E_star, Qb_star); // Update the rates based on this gas state and feed it back
     }
 
     @nogc
-    void update_Q_from_state_vector(ref const(number[13]) S, ref GasState Q, number E_star, number N_plasma) {
-        // Definition of the state vector is:
-        // [0] -> [10] number density of e-, O, O+, ... , NO+
-        // [11] Translational energy of heavy particles
-        number[12] S_dash; S_dash[0] = 0.0; S_dash[1] = 0.0; S_dash[2] = 0.0;
-        S_dash[3] = 0.0; S_dash[4] = 0.0; S_dash[5] = 0.0; S_dash[6] = 0.0;
-        S_dash[7] = 0.0; S_dash[8] = 0.0; S_dash[9] = 0.0; S_dash[10] = 0.0;
-        S_dash[11] = 0.0; // Note, I never remembered to make this S_dash vector the updated 13 term one, but it isn't even used
-        // in this function, so I believe I just copied it over blindly from the Argon file
-
+    void update_Q_from_state_vector(ref const(number[12]) S, ref GasState Q, number E_star, number N_plasma) {
         // Update the GasState from the state vector, that way we always work the rate calculations
         // from a physically realisable state
         number n_e = S[0]; number n_O = S[1]; number n_Op = S[2]; number n_O2 = S[3];
@@ -425,6 +431,8 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         number n_N2 = S[8]; number n_N2p = S[9]; number n_NO = S[10];
         // Utilise charge neutrality
         number n_NOp = n_e + n_O2m - n_Op - n_O2p - n_Np - n_N2p;
+        if (n_NOp < 0.0) { n_NOp = to!number(0.0); }
+
         if (n_e < 0.0) {
             // Do not let the number of electrons go negative
             string msg = "Electron number density tried to go negative.";
@@ -433,9 +441,14 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         // Clip off rounding errors
         //Q.u = fmin(S[11], u_total);
         //Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
-        Q.u_modes[0] = fmin(S[12], u_total);
-        Q.u = fmax(u_total - Q.u_modes[0], 0.0);
-        
+        //Q.u_modes[0] = fmin(S[12], u_total);
+        //Q.u = fmax(u_total - Q.u_modes[0], 0.0);
+        // The above cases were done before I realised I need to reference the energy !
+        //Q.u_modes[0] = S[12];
+        //Q.u = u_total - Q.u_modes[0]; // REMOVED AGAIN MY GOODNESS, BROUGHT BACK, was REMOVED because I was getting odd behaviour from the transrotational temperature
+        Q.u = S[11];
+        Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
+
         number Te = calc_Te_HOP(Q, E_star);
         number T = Q.T;
 
@@ -445,11 +458,13 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         nden[i_e] = n_e; nden[i_O] = n_O; nden[i_Op] = n_Op; nden[i_O2] = n_O2;
         nden[i_O2p] = n_O2p; nden[i_O2m] = n_O2m; nden[i_N] = n_N; nden[i_Np] = n_Np;
         nden[i_N2] = n_N2; nden[i_N2p] = n_N2p; nden[i_NO] = n_NO; nden[i_NOp] = n_NOp;
+
         // Let's just make sure the density is going to be correct, having some issues after going through unit tests
         number rho_calc = 0.0;
         foreach (i; 0 .. _gmodel.n_species) {
             rho_calc += nden[i] * _gmodel.mol_masses[i] / AvN;
         }
+
         Q.rho = rho_calc;
         _gmodel.numden2massf(nden, Q);
         _gmodel.update_thermo_from_rhou(Q);
@@ -517,16 +532,21 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
     }
 
     @nogc
-    number[13] update_reaction_rates(in GasState Q, number E_star, number Qb_star, number v_elec) {
+    number calc_ve(number Te) {
+        // Average thermal velocity based on Maxwell-Boltzmann distirbution statistical mechanics
+        return sqrt((8.0*k_b*Te)/(_m_e*to!double(PI)));
+    }
+
+    @nogc
+    number[12] update_reaction_rates(in GasState Q, number E_star, number Qb_star) {
         // Compute the rate of change of the state vector for the reactions
         // Definition of this new rate of change state vector is:
         // [0] -> [10] dn/dt of e-, O, O+, ... , NO (excluding NO+ since it is a dependent variable)
         // [11] energy leaving translational mode
-        // [12] energy entering vibrational mode
-        number[13] S_dash; S_dash[0] = 0.0; S_dash[1] = 0.0; S_dash[2] = 0.0;
+        number[12] S_dash; S_dash[0] = 0.0; S_dash[1] = 0.0; S_dash[2] = 0.0;
         S_dash[3] = 0.0; S_dash[4] = 0.0; S_dash[5] = 0.0; S_dash[6] = 0.0;
         S_dash[7] = 0.0; S_dash[8] = 0.0; S_dash[9] = 0.0; S_dash[10] = 0.0;
-        S_dash[11] = 0.0; S_dash[12] = 0.0;
+        S_dash[11] = 0.0;
 
         // Determine the current number densities for each species (/m^3)
         number[12] numden;
@@ -544,7 +564,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         number n_NO  = numden[i_NO]; // number density of NO
         number n_NOp = numden[i_NOp]; // number density of NO+
         number n_ions = n_Op + n_O2p - n_O2m + n_Np + n_N2p + n_NOp; // Flag this for potential source of error,
-        // need to check definition of the n_ions parameter used in the energy exchange calculations later
+        // Need to check definition of the n_ions parameter used in the energy exchange calculations later
 
         // Determine the total number density of the plasma (/m^3), which is the sum of the number density of each species
         // since this is a model of an isolated reactor
@@ -552,6 +572,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         foreach (n; 0 .. _gmodel.n_species) {
             N_plasma += numden[n];
         }
+
         number Te = calc_Te_HOP(Q, E_star);
         number T = Q.T;
 
@@ -585,12 +606,6 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         // Parent, 2021 provided this additional ionization reaction for N
         number k1e = (1.1e32/AvN) * pow(Te, -3.14) * exp(-169000.0/Te); // cm3/s
         k1e *= 1.0e-6;
-
-        {
-        // Need to look for the below rate coefficients ? :
-        // e- + N2 -> N + N + e-
-        // No this is the same as regular N2 dissociation anyway
-        }
 
         // ========== ELECTRON-ION RECOMBINATION ==========
 
@@ -944,6 +959,8 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         // '0' Vibrational (electronic)
         // '1' Free Electron (electronic) -- This is a 2T model so we don't deal with this, I think it was recommended not to since I only had 6 weeks
 
+        // Now we calculate the elastic electron-heavy particle energy exhange based on the Appleton-Bray expression, using Gnoffo 1989 and Imamura 2018 parameters.
+        // This is mainlny based on the implementation from Nick Gibbons in two_temperature_air_kinetics.d
         number Q_e_O, Q_e_N, Q_e_O2, Q_e_N2, Q_e_NO;
 
         // Calculate collision cross sectional areas for each of the neutrals
@@ -954,6 +971,9 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         Q_e_N2 = 7.5e-20 + 5.5e-24*Te - 1.0e-28*Te^^2;
         Q_e_NO = 1.0e-19;
 
+        // Calculate the thermal electron velocity
+        number v_elec = calc_ve(Te);
+
         // Calculate the collisions of each neutral with electrons, then sum them up for total electron-neutral collision, based on Imamura (2018)
         number nu_e_O = 4.0/3.0 * Q_e_O * n_O * v_elec;
         number nu_e_O2 = 4.0/3.0 * Q_e_O2 * n_O2 * v_elec;
@@ -962,18 +982,23 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         number nu_e_NO = 4.0/3.0 * Q_e_NO * n_NO * v_elec;
         number nu_e_n = nu_e_O + nu_e_O2 + nu_e_N + nu_e_N2 + nu_e_NO;
 
-        // Calculate the collision of each ion with electrons, based on Imamura (2018)
-        number nu_e_i = (6.0 * to!number(PI)) * ((q_e^^2) / (12.0 * to!number(PI) * eps_zero * k_b * Te))^^2 * log(12.0 * to!number(PI) * pow(eps_zero * k_b / (q_e^^2), 3.0/2.0) * sqrt(pow(Te, 3.0) / n_e)) * n_ions * v_elec;
-        
-        // Find total collision frequency
-        number nu_tot = nu_e_n + nu_e_i; // Not useful anymore :(
+        // Calculate the collision of each ion with electrons, based on Imamura (2018) and two_temperature_air_kinetics.d
+        number Le = 4.0 * to!number(PI) * eps_zero * k_b * Te / q_e / q_e;
+        number Lambda = log(Le*Le*Le/to!number(PI) / fmax(n_e, 1.0));
+        number nu_e_i = (6.0 * to!number(PI)) * pow(q_e*q_e / (12.0 * to!number(PI) * eps_zero * k_b * Te), 2) * Lambda * n_ions * v_elec;
 
         // Accumulate the elastic energy exchange contributions from neutrals and ions
-        number elastic_energy_constants = 3.0 * n_e * _m_e * k_b * (Te - T); // Terms not related to the species
+        number elastic_energy_constants = 3.0 * n_e * _m_e * k_b * (Te - T); // Terms not related to the species, but it is clear that when Te > T, the energy will flow into transrotational and vice versa (good)
         // The neutral species have corresponding collisions, so we must manually tally up the elastic energy for the neutrals
-        number een_neutrals = (nu_e_O / (_gmodel.mol_masses[i_O]/AvN)) + (nu_e_O2 / (_gmodel.mol_masses[i_O2]/AvN)) + (nu_e_N / (_gmodel.mol_masses[i_N]/AvN)) + (nu_e_N2 / (_gmodel.mol_masses[i_N2]/AvN)) + (nu_e_NO / (_gmodel.mol_masses[i_NO]/AvN));
+        number een_neutrals = (nu_e_O / (_gmodel.mol_masses[i_O]/AvN))
+                            + (nu_e_O2 / (_gmodel.mol_masses[i_O2]/AvN))
+                            + (nu_e_N / (_gmodel.mol_masses[i_N]/AvN))
+                            + (nu_e_N2 / (_gmodel.mol_masses[i_N2]/AvN))
+                            + (nu_e_NO / (_gmodel.mol_masses[i_NO]/AvN));
         // The ionic species have one overarching collision, so we can just divide by the average mass of the ions instead of tallying
-        number ions_avg_mass = ((_gmodel.mol_masses[i_Op] + _gmodel.mol_masses[i_O2p] + _gmodel.mol_masses[i_O2m] + _gmodel.mol_masses[i_Np] + _gmodel.mol_masses[i_N2p] + _gmodel.mol_masses[i_NOp]) / AvN) / 6.0;
+        number ions_avg_mass = ((_gmodel.mol_masses[i_Op] + _gmodel.mol_masses[i_O2p]
+                            + _gmodel.mol_masses[i_O2m] + _gmodel.mol_masses[i_Np]
+                            + _gmodel.mol_masses[i_N2p] + _gmodel.mol_masses[i_NOp]) / AvN) / 6.0;
         number een_ions = nu_e_i / ions_avg_mass;
         number elastic_energy = elastic_energy_constants * (een_neutrals + een_ions); // W/m3
 
@@ -988,6 +1013,9 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         // energy will take care of the signs for us :)
         number energy_exchange = elastic_energy;// + inelastic_energy;
 
+        // Store this elastic energy for use in the ODE loops
+        recent_eer = elastic_energy; // W/m3
+
         // Now to determine V-T relaxation
         number VT_relax_rate = 0.0;
         int[3] vib_species = [i_O2, i_N2, i_NO]; 
@@ -997,7 +1025,10 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
             int isp = vib_species[idx];
             number theta_v = theta_v_array[idx];
 
-            // Calculate relaxation time based on Millikan-White and Park high-T correction
+            // Add a guard against low vibroelectronic temp which would cause incorrect application
+            if (Q.T_modes[0] < 50.0) continue;
+
+            // Calculate relaxation time based on Millikan-White and Park high-T correction - could be changed to Parent, 2016 relaxation time
             number tau_vt = calculate_tau_vt(Q, isp);
 
             // 'Equilibrium' vibrational energy from transrotational temperature
@@ -1010,24 +1041,18 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
             VT_relax_rate += Q.massf[isp] * (e_v_star - e_v) / tau_vt;
         }
 
-        // Apply this energy exchange to the S_dash to feed into the source terms
-        //S_dash[11] = energy_exchange - VT_relax_rate; // Energy leaving translation
-        //S_dash[12]  = VT_relax_rate; // Energy entering vibration
-        // Trying new attempt at things, believe (after a very rushed and rough units calc) that I was adding the wrong units together
-        S_dash[11] = (-1.0 * VT_relax_rate) + (elastic_energy / Q.rho); // J/kg/s
-        S_dash[12] = VT_relax_rate; // J/kg/s
+        // Apply this relaxation to S_dash to feed the internal redistribution of energy. Qb and elastic_energy are external sources for u_total
+        S_dash[11] = -VT_relax_rate; // J/kg/s
         return S_dash;
     } // end rates
 
     @nogc
-    bool state_vector_is_within_limits(ref number[13] S)
+    bool state_vector_is_within_limits(ref number[12] S)
     {
         bool result = true;
         if (S[0] < 0.0) { result = false; }
         if (S[0] > _n_e_max) { result = false; }
         if (S[11] < _u_min_heavy_particles) { result = false; }
-        // Allow for finite-difference perturbations when evaluating Jacobian.
-        if (S[11] > u_total*1.01) { result = false; }
         return result;
     }
 private:
@@ -1139,6 +1164,8 @@ private:
     // We don't want the translational energy of the heavy particles
     // dropping too low, so keep limit for their internal energy.
     number _u_min_heavy_particles;
+    // Set during update_reaction_rates for use in the ODE loops
+    number recent_eer; // Elastic energy rate
 
     double _chem_dt;
 } // End LowTwoTemperatureAirKinetics
@@ -1148,7 +1175,7 @@ version(two_temperature_reacting_air_kinetics_test) {
     import util.msg_service;
     import std.math : isClose;
     import gas.low_two_temperature_reacting_air;
-    string unit_test_case = "relaxation";
+    string unit_test_case = "energy investigation";
     void main() {
         if ( unit_test_case == "relaxation") {
             auto L = init_lua_State();
@@ -1182,10 +1209,10 @@ version(two_temperature_reacting_air_kinetics_test) {
             t_data ~= 0.0; T_data ~= gd.T; Tve_data ~= gd.T_modes[0]; N_data ~= gd.massf[gm.species_index("N")]; O_data ~= gd.massf[gm.species_index("O")];
             NO_data ~= gd.massf[gm.species_index("NO")]; N2_data ~= gd.massf[gm.species_index("N2")]; O2_data ~= gd.massf[gm.species_index("O2")];
             // Set the constant flow field values (just random for now)
-            reactor.E_mag_p = 40000; // V/m
-            reactor.v_elec_p = 1000.0; // m/s
-            reactor.B_mag_p = 1.0; // T
-            reactor.Qb_p = 1.0e4; // W/m3
+            reactor.E_mag_p = 0.0; // V/m
+            reactor.bulk_v_elec_p = 0.0; // m/s
+            reactor.B_mag_p = 0.0; // T
+            reactor.Qb_p = 0.0; // W/m3
             double[maxParams] params; // ignore
             foreach (i; 0 .. n_steps) {
                 reactor(gd, dt, dt, params);
@@ -1221,13 +1248,6 @@ version(two_temperature_reacting_air_kinetics_test) {
             auto gm = new TwoTemperatureReactingAir(L);
             auto reactor = new LowTwoTemperatureAirKinetics("sample-input/two-temperature-reacting-air-model.lua", gm);
             auto gd = GasState(gm);
-            
-            // Below is nonsensical oopsy
-            //gd.massf[gm.species_index("O2")] = 0.21*(1.0-2.0*Xi);
-            //gd.massf[gm.species_index("N2")] = 0.79*(1.0-2.0*Xi);
-            //gd.massf[gm.species_index("O2+")] = 0.21*Xi;
-            //gd.massf[gm.species_index("N2+")] = 0.79*Xi;
-            //gd.massf[gm.species_index("e-")] = Xi;
 
             number dt = 1.0e-9; // Super small timestep since the kinetics will be super stiff
             // If we do anything bigger than a nanosecond the stiffness of air chemical kinetics will (probably) push the test to failure?
@@ -1235,16 +1255,16 @@ version(two_temperature_reacting_air_kinetics_test) {
             int n_steps = to!int(max_time/dt + 1);
 
             // Set the constant flow field values for different scenarios to see how the plasma behaves
-            number[4][4] test_cases; // Row 0-3 are the cases. Column 0 is E_mag_p (V/m), column 1 is v_elec_p (m/s), column 2 is B_mag_p (T), column 3 is Qb_p (W/m3)
+            number[4][4] test_cases; // Row 0-3 are the cases. Column 0 is E_mag_p (V/m), column 1 is bulk_v_elec_p (m/s), column 2 is B_mag_p (T), column 3 is Qb_p (W/m3)
             // Case 1
-            test_cases[0][0] = 12500.0; test_cases[0][1] = 2000.0; test_cases[0][2] = 1.0; test_cases[0][3] = 30.0e06;
+            test_cases[0][0] = 0.0; test_cases[0][1] = 2000.0; test_cases[0][2] = 1.0; test_cases[0][3] = 30.0e6; // Comparison case
             test_cases[1][0] = 15000.0; test_cases[1][1] = 2000.0; test_cases[1][2] = 1.0; test_cases[1][3] = 30.0e06;
             test_cases[2][0] = 17500.0; test_cases[2][1] = 2000.0; test_cases[2][2] = 1.0; test_cases[2][3] = 30.0e06;
             test_cases[3][0] = 20000.0; test_cases[3][1] = 2000.0; test_cases[3][2] = 1.0; test_cases[3][3] = 30.0e06;
             foreach (testcase; 0 .. 4) {
                 writeln("Test case " ~ to!string(testcase) ~ " of 3");
                 reactor.E_mag_p = test_cases[testcase][0]; // V/m
-                reactor.v_elec_p = test_cases[testcase][1]; // m/s
+                reactor.bulk_v_elec_p = test_cases[testcase][1]; // m/s
                 reactor.B_mag_p = test_cases[testcase][2]; // T
                 reactor.Qb_p = test_cases[testcase][3]; // W/m3
 
@@ -1281,7 +1301,7 @@ version(two_temperature_reacting_air_kinetics_test) {
                 Np_data ~= gd.massf[gm.species_index("N+")]; Op_data ~= gd.massf[gm.species_index("O+")]; O2p_data ~= gd.massf[gm.species_index("O2+")];
                 O2m_data ~= gd.massf[gm.species_index("O2-")]; N2p_data ~= gd.massf[gm.species_index("N2+")]; NOp_data ~= gd.massf[gm.species_index("NO+")];
                 e_data ~= gd.massf[gm.species_index("e-")];
-                
+
                 double[maxParams] params; // Ignore, is used in opCall but we use public variables instead
                     foreach (i; 0 .. n_steps) {
                         reactor(gd, dt, dt, params);
