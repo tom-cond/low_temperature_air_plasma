@@ -16,7 +16,8 @@ Copy the kinetics file into ```gdtk/src/kinetics```
 
 Copy the gas file into ```gdtk/src/gas```
 
-Copy the .lua files in this repository (in ```sample-data``` and ```sample-input```) into their respective gas and kinetics sample-data and sample-input directories, the unit tests will refer to them. Ensure you choose your kinetics ODE method, only Forward Euler and Runge Kutta 4 are implemented, a Backward Euler was not implemented purely since time was of the essence in this project and we have a state vector with 12 variables
+Copy the .lua files in this repository (in ```sample-data``` and ```sample-input```) into their respective gas and kinetics sample-data and sample-input directories, the unit tests will refer to them. Ensure you choose your kinetics ODE method, only Forward Euler and Runge Kutta 4 are implemented, a Backward Euler was not implemented purely since time was of the essence in this project and we have a state vector with 12 variables.
+
 Choose your case (relaxation or energy investigation)
 
 In your linux environment, move to the kinetics directory (```$ cd gdtk/src/kinetics```) and run all kinetics tests (```$ make test```) which will run through all of the kinetics file tests
