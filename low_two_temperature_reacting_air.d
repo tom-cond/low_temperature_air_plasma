@@ -155,9 +155,22 @@ public:
             }
         }
 
+        // Compute the reference vibrational energies at T_REF, which ensures u_modes[0] = 0 at T_modes[0] = T_REF
+        _reference_vib_energy.length = _n_species;
+        foreach (isp; 0 .. _n_species) {
+            if (_species_ids[isp] == Species.O2) {
+                _reference_vib_energy[isp] = _R[isp] * theta_v_O2 / (exp(theta_v_O2 / T_REF) - 1.0);
+            } else if (_species_ids[isp] == Species.N2) {
+                _reference_vib_energy[isp] = _R[isp] * theta_v_N2 / (exp(theta_v_N2 / T_REF) - 1.0);
+            } else if (_species_ids[isp] == Species.NO) {
+                _reference_vib_energy[isp] = _R[isp] * theta_v_NO / (exp(theta_v_NO / T_REF) - 1.0);
+            } else {
+                _reference_vib_energy[isp] = 0.0;
+            }
+        }
+
         // Finish off constructor
         lua_getglobal(L, "TwoTemperatureReactingAir");
-        // [TODO] test that we actually have the table as item -1
         // Now, pull out the remaining numeric value parameters.
         _ion_tol = getDoubleWithDefault(L, -1, "ion_tol", 0.0);
         _Te_default = getDoubleWithDefault(L, -1, "Te_default", 10000.0);
@@ -202,19 +215,18 @@ public:
     override void update_thermo_from_rhou(ref GasState Q)
     {
         number alpha = ionisation_fraction_from_mass_fractions(Q);
-        if (Q.u <= 0.0 || Q.rho <= 0.0 || Q.u_modes[0] < 0.0) {
-            string msg = "Internal energy and/or density was negative for update_thermo_from_rhou.";
+        if (Q.rho <= 0.0) {
+            string msg = "Density was negative for update_thermo_from_rhou.";
             debug { msg ~= format("\nQ=%s\n", Q); }
             throw new GasModelException(msg);
         }
         Q.T = update_gas_temperature(Q);
         number Te = _Te_default; // in case alpha == 0.0
         if (alpha > _ion_tol) {
-            // CHANGE THIS TO A DIFFERENT DEFINITION OF Te IF NOT DOING THE HARD CODED ABLE PLASMA CASE
-            Te = Q.T_modes[0]; // The electron temperature is already defined in the kinetics file for this hard coded case
+            Te = Q.T_modes[0];
         }
         if (Te > 500.0e3) { Te = 500.0e3; }
-        if (Te < 200.0) { Te = 200.0; }
+        //if (Te < 200.0) { Te = 200.0; }
         Q.T_modes[0] = vibElecTemperature(Q);
         Q.p = update_gas_pressure(Q, Te);
     }
@@ -249,7 +261,7 @@ public:
             Te = Q.T_modes[0]; // The electron temperature is already defined in the kinetics file for this hard coded case
         }
         if (Te > 500.0e3) { Te = 500.0e3; }
-        if (Te < 200.0) { Te = 200.0; }
+        //if (Te < 200.0) { Te = 200.0; }
         Q.T_modes[0] = vibElecTemperature(Q);
         
         // Calculate energy
@@ -410,16 +422,19 @@ public:
         foreach(i; 0 .. _n_species) {
             // Electron transitional energy
             if (_species_ids[i] == Species.e_minus) {
-                e_ve += Q.massf[i] * (3.0/2.0) * _R[i] * Te;
+                // Referenced to T_REF
+                e_ve += Q.massf[i] * ((3.0/2.0) * _R[i] * (Te - T_REF) + _del_hf[i] - (_R[i] * T_REF));
                 continue;
             }
             // Vibrational energy (Parent, 2025) -> e_v = (R_i*theta_i)/(exp(theta_i/T_v) - 1)
+            // Then this needs to be in reference to T_REF vibrational energies
             if (_species_ids[i] == Species.O2) theta_v = theta_v_O2;
             else if (_species_ids[i] == Species.N2) theta_v = theta_v_N2;
             else if (_species_ids[i] == Species.NO) theta_v = theta_v_NO;
 
             if (theta_v > 0.0) {
-                number e_v = _R[i] * theta_v / (exp(theta_v / Te) - 1.0);
+                // Referenced to T_REF vibrational energy
+                number e_v = _R[i] * theta_v / (exp(theta_v / Te) - 1.0) - _reference_vib_energy[i];
                 e_ve += Q.massf[i] * e_v;
             }            
         }
@@ -459,9 +474,10 @@ public:
         // Iteratively solve for T_modes[0] given u_modes[0]
         // using Newton-Raphson: T_new = T_old - f(T)/f'(T), where f(T) = vibElecEnergy(T) - u_modes[0] and f'(T) = Cv
         // Special case for if u_modes[0] is close to zero, return minimum vibroelectronic temperature
-        if (Q.u_modes[0] <= 0.0) {  // <= 0 J/kg
-        return 200.0;  // Min vibrational temperature
-    }
+        //if (Q.u_modes[0] <= 0.0) {  // <= 0 J/kg
+        //return 200.0;  // Min vibrational temperature
+    //}
+        // The above check was removed as it was made before I realised I needed to reference u_modes[0]
         int MAX_ITERATIONS = 20;
         double TOL = 1.0e-6;
         double E_TOL = 0.01; // J
@@ -519,6 +535,7 @@ private:
     number[] _R;
     number[] _Cp_tr_rot;
     Species[] _species_ids;
+    number[] _reference_vib_energy; // Vibrational energy at T_REF, for consistent referencing
 
     // From air gas model
     PerfectGasMixEOS _pgMixEOS;

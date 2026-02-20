@@ -1,102 +1,41 @@
-title: "Low Temperature Air Plasma README"
+Low Temperature Air Plasma README
 
     Prerequisites:
-        NOTE - The low temperature air plasma model was developed in Eilmer Version 4.1.0, if you wish to convert the files to Eilmer Version 5.0.0 (lmr),
-            you will need to make the conversions yourself (sorry)
+        NOTE - The low temperature air plasma model was developed in Eilmer Version 4.1.0, if you wish to convert the files to Eilmer Version 5.0.0 (lmr), you will need to make the conversions yourself (sorry)
         It is presumed you have Eilmer installed on your device and all of its prerequisites, the below prerequisites are additional to the base Eilmer model:
             - Gas-dynamic library
-                ```
                 $ cd gdtk/src/gas 
                 $ make install
-                ```
-    
-    Additions to the source code:
-        In gdtk/src/eilmer/globalconfig.d 
-            line 1778:
-                import gas.low_two_temperature_reacting_air;
-            line 1826:
-                if (cast(TwoTemperatureReactingAir)gm) { multiT = true; }
-        
-        In gdtk/src/gas/gas-package-test.tcl 
-            line 130-132:
-                test two-temperature-reacting-air-test {Testing Tom Condon's two-T low temperature reacting air gas model} -body {
-                    exec ./two_temperature_reacting_air_test
-                } -result {} -returnCodes {0}
-        
-        In gdtk/src/gas/gas_files.mk 
-            line 34:
-                $(GAS_DIR)/low_two_temperature_reacting_air.d
-        
-        In gdtk/src/gas/init_gas_model.d 
-            line 29:
-                import gas.low_two_temperature_reacting_air: TwoTemperatureReactingAir;
-            line 127-129:
-                case "TwoTemperatureReactingAir":
-                    gm = new TwoTemperatureReactingAir(L);
-                    break;
-        
-        In gdtk/src/gas/makefile
-            line 39:
-                two_temperature_reacting_air_test
-            line 205:
-                - rm -f ./two-temperature-reacting-air-model.lua
-            line 597-603:
-                two_temperature_reacting_air_test: $(GAS_FILES) $(GAS_LUA_FILES) $(EQC_SRC_FILES) \
-                $(KINETICS_FILES) $(KINETICS_LUA_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
-                $(LIBEQC) $(LIBLUA)
-                $(DMD) $(OF)$@ $(DFLAGS) $(DVERSION)$@ \
-                    $(GAS_FILES) $(GAS_LUA_FILES) $(EQC_SRC_FILES) $(KINETICS_FILES) $(KINETICS_LUA_FILES) \
-                    $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
-                    $(LIBEQC) $(LIBLUA) $(DLINKFLAGS)
-        
-        In gdtk/src/kinetics/init_thermochemical_reacctor.d 
-            line 33:
-                import gas.low_two_temperature_reacting_air;
-            line 55:
-                import kinetics.low_two_temperature_reacting_air_kinetics;
-            line 105-107:
-                if ((cast(TwoTemperatureReactingAir) gmodel) !is null) {
-                    reactor = new LowTwoTemperatureAirKinetics(fileName1, gmodel);
-                }
-            
-        In gdtk/src/kinetics/kinetics-package-test.tcl 
-            line 35-37:
-                test two-temperature-reacting-air-kinetics-test {Testing Tom Cond's two-temperature reacting air reaction mechanism.} -body {
-                    exec ./two_temperature_reacting_air_kinetics_test
-                } -result {} -returnCodes {0}
-        
-        In gdtk/src/kinetics/kinetics_files.mk 
-            line 28:
-                $(KINETICS_DIR)/low_two_temperature_reacting_air_kinetics.d
-        
-        In gdtk/src/kinetics/makefile
-            line 27:
-                two_temperature_reacting_air_kinetics_test
-            line 82-86:
-                - rm -f two_temperature_reacting_air_kinetics_test_results.data
-                - rm -f two_temperature_reacting_air_kinetics_test_results_v0.data
-                - rm -f two_temperature_reacting_air_kinetics_test_results_v1.data
-                - rm -f two_temperature_reacting_air_kinetics_test_results_v2.data
-                - rm -f two_temperature_reacting_air_kinetics_test_results_v3.data
-            line 145-151:
-                two_temperature_reacting_air_kinetics_test:  $(KINETICS_FILES) $(GAS_FILES) $(EQC_SRC_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
-                $(KINETICS_LUA_FILES) $(GAS_LUA_FILES) \
-                $(LIBEQC) $(LIBLUA)
-                ldmd2 -of$@ -debug -g -dip1008 -version=$@ \
-                    $(KINETICS_FILES) $(GAS_FILES) $(EQC_SRC_FILES) $(UTIL_FILES) $(NM_FILES) $(NTYPES_FILES) \
-                    $(KINETICS_LUA_FILES) $(GAS_LUA_FILES) \
-                    $(LIBEQC) $(LIBLUA) $(DLINKFLAGS)
 
     To run the unit tests:
         Copy the kinetics file into gdtk/src/kinetics
         Copy the gas file into gdtk/src/gas
-        Copy the .lua files in this repository (in sample-data and sample-input) into their respective gas and kinetics sample-data and sample-input
-            directories, the unit tests will refer to them
+        Copy the .lua files in this repository (in sample-data and sample-input) into their respective gas and kinetics sample-data and sample-input directories, the unit tests will refer to them. Ensure you choose your kinetics ODE method, only Forward Euler and Runge Kutta 4 are implemented, a Backward Euler was not implemented purely since time was of the essence in this project and we have a state vector with 12 variables
         Choose your case (relaxation or energy investigation)
-        In your linux environment, move to the kinetics directory ($ cd gdtk/src/kinetics) and run all kinetics tests ($ make test)
-            which will run through all of the kinetics file tests
+        In your linux environment, move to the kinetics directory ($ cd gdtk/src/kinetics) and run all kinetics tests ($ make test) which will run through all of the kinetics file tests
 
     To use the plotting scripts:
         If you used the relaxation test case, run the low_temp_air_plasma_relaxation_plotting.py script
         If you used the energy investigation test case, run the low_temp_air_plasma_energy_plotting.py script
     
+    Version updates:
+        Version 1.0.0
+            - Very initial kinetics and gas module with the very first few unit test results
+        Version 1.1.0
+            - The slightly cleaned up and improved kinetics file which fixed some typos and human error when it came to the hard coding of the reaction rates
+        Version 1.2.0
+            - Implemented a better management of the two energy modes in the kinetics file
+        Version 1.2.1
+            - Implemented the correct reference vibrational energy in the gas model and kinetics file, did not attach the corresponding figures as they were unpleasant
+        Version 2.0.0
+            - Optional total energy which is influenced from the electron beam power Qb was added to better inform the simple unit test cases I was doing to present reliable results
+              - This needs to be handled with care, the PFE jobs and source term files account for this additional energy from the electron beam power themselves, so any points where Qb is added to the total energy should have the Qb term removed. There should be enough comments in my kinetics file to direct users to do this
+            - Better care has been taken when calculating the number density of NO+, ensuring we don't get any negative values
+            - The GasState is now updated after each step in the Forward Euler and Runge Kutta 4 methods to improve stability
+            - Changed the elastic energy exchange method to better reflect the Appleton-Bray expression as defined by Nick Gibbons in two_temperature_air_kinetics.d
+            - The elastic energy exchange was kept outside of the state vector derivatives, i.e. an external source, since the electron temperature is maintained by the reduced electric field strength rather than being maintained by the vibroelectronic energy. This energy exchange is implemented into the ODE loops. The electron velocity for the elastic energy exchange was also changed from the bulk electron velocity to the average thermal velocity from the Boltzmann distribution in statistical mechanics
+            - Removed the reliance on the bulk electron velocity in the update_reaction_rates function due to the update above
+            - Fixed some silly unit errors
+            - Included a git diff file for Eilmer developers to better implement my model into the gdtk source code
+            - Included a git log file to better inform which version of Eilmer my model was made in
+            - Cleaned up unnecessary code to save on some computational cost

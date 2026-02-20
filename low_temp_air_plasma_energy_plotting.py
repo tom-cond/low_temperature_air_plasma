@@ -21,7 +21,7 @@ CASE_LABELS = [
 ]
 
 # Fixed params common to all cases
-COMMON_PARAMS = "pseudo bulk electron velocity = 2000 m/s, magnetic field strength = 1 T, Electron beam volumetric deposition = 30 MW/m^3"
+COMMON_PARAMS = "Pseudo bulk electron velocity = 2000 m/s, Magnetic field strength = 1 T, Electron beam volumetric deposition = 30 MW/m^3"
 
 # Load data
 dfs = []
@@ -52,7 +52,7 @@ for i, (ax, df, label) in enumerate(zip(axes_T, dfs, CASE_LABELS)):
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
 fig_T.suptitle(
-    f'Two-Temperature Air Kinetics - Temperature Evolution\n({COMMON_PARAMS})\nAt 500K and 2kPa',
+    f'Two-Temperature Air Kinetics - Temperature Evolution\n({COMMON_PARAMS})',
     fontsize=13, fontweight='bold'
 )
 plt.tight_layout(rect=[0, 0, 1, 0.95])
