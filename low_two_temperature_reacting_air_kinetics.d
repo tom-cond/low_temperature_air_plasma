@@ -50,6 +50,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                 _mu[isp][jsp] *= 1000.0; // convert kg/mole to g/mole
             }
         }
+
         // Map species to their respective index in Eilmer
         i_e   = gmodel.species_index("e-");
         i_O   = gmodel.species_index("O");
@@ -72,7 +73,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         if (!lua_isnil(L, -1)) 
         {
             _ion_tol = getDoubleWithDefault(L, -1, "ion_tol", 0.0);
-            _integration_method = getStringWithDefault(L, -1, "integration_method", "Forward_Euler");
+            _integration_method = getStringWithDefault(L, -1, "integration_method", "RK4");
             _T_min_for_reaction = getDoubleWithDefault(L, -1, "T_min_for_reaction", 200.0); // set to 200.0K from 3000.0K
             _Te_default = getDoubleWithDefault(L, -1, "Te_default", 10000.0); // User can set to 200.0K for low temperature applications
             _n_step_suggest = getIntWithDefault(L, -1, "n_step_suggest", 10);
@@ -80,14 +81,6 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         }
         lua_close(L);
     }
-
-    // It is expected that params[0] is the electric field magnitude E, params[1] is the electron velocity in the electric field bulk_v_elec
-    // params[2] is the magnetic field magnitude B, and params[3] is the electron beam power per unit volume Qb
-    // These positions are an interface requirement for this 'self-contained' hard-coded model for explicit uses
-    // Further changes will be made to generalise this model such that Carolyn J. can use it easily (hopefully)
-    // For generalisation, simply just set Qb = 0.0 in params and everything should still run smoothly ?
-
-    // The above has been changed after running into issues with having to pass in the params values constantly into different functions
 
     @nogc
     override void opCall(ref GasState Q, double tInterval, ref double dtSuggest, ref number[maxParams] params) 
@@ -133,8 +126,8 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
 
             // Give the amount of energy, we have a limit to the number of ions that can be formed before driving the
             // energy of the heavy particles too low, as per the constructor we will put a temperature limit of the heavy particles
-            _u_min_heavy_particles = 3.0 / 2.0 * R * _T_min_for_reaction; // Just taken from Argon file but not used/relevant
-            number u_available = u_total - _u_min_heavy_particles;
+            _u_min_heavy_particles = 3.0 / 2.0 * R * _T_min_for_reaction; // Just taken from Argon file but barely used/relevant
+            number u_available = u_total - _u_min_heavy_particles; // Ditto
 
             // Retain a copy of the initial state, in case the integration is restarted with smaller time steps
             number initial_n_e = n_e;
@@ -150,8 +143,6 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
             number initial_n_NO = n_NO;
             number initial_n_NOp = n_NOp;
             number initial_translational_energy = Q.u;
-            number initial_vibrational_energy = Q.u_modes[0];
-            number initial_translational_energy_T = Q.T;
 
             // Calculate necessary characteristics of the plasma for the rate coefficients
             // E* = |E + Ve x B|/N
@@ -197,7 +188,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                             // Since the test cases are 0D, and the power deposition of the beam is constantly applied to this box,
                             // the beam energy should probably be influencing the total energy of the actual gas in this reactor.
                             // In one of the old pfe job scripts and source term file, it is said that there is energy addition because there is electron additions
-                            // NOTE, COMMENT THE BELOW LINE OUT WHEN DOING ACTUAL SIMULATIONS, THE SOURCE TERM FILE SHOULD ACCOUNT FOR THIS ITSELF
+                            // NOTE, REMOVE THE QB TERM WHEN DOING ACTUAL SIMULATIONS, THE SOURCE TERM FILE SHOULD ACCOUNT FOR THIS ITSELF
                             u_total += (Qb / Q.rho + recent_eer / Q.rho) * _chem_dt;
 
                             // Update Q to reflect the new energy transrotational energy
@@ -205,7 +196,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
 
                             if (!state_vector_is_within_limits(S)) {
                                 string msg = "State vector not within limits";
-                                debug { msg ~= format("\n   y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11]); }
+                                debug { msg ~= format("\n   y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11]); }
                                 throw new ThermochemicalReactorUpdateException(msg);
                             }
                         } // end foreach n
@@ -244,7 +235,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                             //foreach (i; 0 .. 13) { S[i] += 1.0/6.0*(k1[i]+2.0*k2[i]+2.0*k3[i]+k4[i]); }
 
                             // Follow the same energy increase as in the forward euler case
-                            // NOTE, COMMENT THE BELOW LINE OUT WHEN DOING ACTUAL SIMULATIONS, THE SOURCE TERM FILE SHOULD ACCOUNT FOR THIS ITSELF
+                            // NOTE, REMOVE THE QB TERM WHEN DOING ACTUAL SIMULATIONS, THE SOURCE TERM FILE SHOULD ACCOUNT FOR THIS ITSELF
                             u_total = u_total_initial + (Qb / rho_initial + eer_initial / rho_initial) * _chem_dt;
 
                             // Update Q to reflect the new energy transrotational energy
@@ -252,7 +243,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
 
                             if (!state_vector_is_within_limits(S)) {
                                 string msg = "State vector not within limits";
-                                debug { msg ~= format("\n    y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11]); }
+                                debug { msg ~= format("\n    y=[%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g]", S[0], S[1], S[2], S[3], S[4], S[5], S[6], S[7], S[8], S[9], S[10], S[11]); }
                                 throw new ThermochemicalReactorUpdateException(msg);
                             }
                         } // end foreach n
@@ -272,17 +263,11 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                     n_N2  = fmax(S[8], 0.0);
                     n_N2p = fmax(S[9], 0.0);
                     n_NO  = fmax(S[10], 0.0);
-                    //Q.u_modes[0] = fmin(S[12], u_total);
-                    //Q.u = fmax(u_total - Q.u_modes[0], 0.0); // Energy conservation
-                    // The above cases were done before I realised I need to reference the energy !
-                    //Q.u_modes[0] = S[12];
-                    //Q.u = u_total - Q.u_modes[0]; // REMOVED AGAIN MY GOODNESS, BROUGHT BACK, was REMOVED because I was getting odd behaviour from the transrotational temperature
                     Q.u = S[11];
                     Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
 
                     // Reconstruct the other parts of the flow state
                     // Utilise charge neutrality
-                    //n_NOp = (-1.0*n_e) + n_Op + n_O2p - n_O2m + n_Np + n_N2p;
                     n_NOp = n_e + n_O2m - n_Op - n_O2p - n_Np - n_N2p;
                     if (n_NOp < 0.0) { n_NOp = to!number(0.0); }
                 
@@ -297,30 +282,10 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
                     }
                     Q.rho = rho_calc;
                     _gmodel.numden2massf(numden, Q);
-                    // Ignore the below comment, I was oblivious to the fact that in a 2T model, the vibroelectronic temperature is not just the electron temperature
-                    //Q.T_modes[0] = calc_Te_HOP(Q, E_star); // We actually calculate electron temperature here in the kinetics file, as opposed to in the gas file like usual
                     _gmodel.update_thermo_from_rhou(Q);
                     _gmodel.update_sound_speed(Q);
 
-                    // Let's ensure we can capture some of the transient effects that may occur during massive/violent reactions
-                    //number frac_change = abs(Q.T - initial_translational_energy_T) / initial_translational_energy_T; // We don't want non-sensical instant temp differences
-                    //if (frac_change > 0.1) {
-                    //    // Scale the change back a bit !
-                    //    number scale = 0.1 / frac_change;
-                    //    Q.u = initial_translational_energy + (Q.u - initial_translational_energy) * scale;
-                    //    Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
-                    //    // Run the updates again
-                    //    _gmodel.update_thermo_from_rhou(Q);
-                    //    _gmodel.update_sound_speed(Q);
-                    //} Removed since this is an artefact of old code issues, but only commented out so developers can understand my code design process
-                    
                     finished_integration = true;
-                    //if (integration_attempt == 1) {
-                    //    // Success on the first attempt so increase the time step a little for the next call
-                    //    _chem_dt *= 1.01;
-                    //} 
-                    // Turns out the above blocks of code was messing with the 'catch(Exception e)' block of code
-                    // and forming incredbily massive numerical instabilities (sorry)
                 } catch(Exception e) {
                     if (integration_attempt < 10) {
                         // We will allow a retry with a smaller time step
@@ -429,6 +394,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         number n_e = S[0]; number n_O = S[1]; number n_Op = S[2]; number n_O2 = S[3];
         number n_O2p = S[4]; number n_O2m = S[5]; number n_N = S[6]; number n_Np = S[7];
         number n_N2 = S[8]; number n_N2p = S[9]; number n_NO = S[10];
+
         // Utilise charge neutrality
         number n_NOp = n_e + n_O2m - n_Op - n_O2p - n_Np - n_N2p;
         if (n_NOp < 0.0) { n_NOp = to!number(0.0); }
@@ -438,14 +404,6 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
             string msg = "Electron number density tried to go negative.";
             throw new Exception(msg);
         }
-        // Clip off rounding errors
-        //Q.u = fmin(S[11], u_total);
-        //Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
-        //Q.u_modes[0] = fmin(S[12], u_total);
-        //Q.u = fmax(u_total - Q.u_modes[0], 0.0);
-        // The above cases were done before I realised I need to reference the energy !
-        //Q.u_modes[0] = S[12];
-        //Q.u = u_total - Q.u_modes[0]; // REMOVED AGAIN MY GOODNESS, BROUGHT BACK, was REMOVED because I was getting odd behaviour from the transrotational temperature
         Q.u = S[11];
         Q.u_modes[0] = fmax(u_total - Q.u, 0.0);
 
@@ -989,12 +947,14 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
 
         // Accumulate the elastic energy exchange contributions from neutrals and ions
         number elastic_energy_constants = 3.0 * n_e * _m_e * k_b * (Te - T); // Terms not related to the species, but it is clear that when Te > T, the energy will flow into transrotational and vice versa (good)
+
         // The neutral species have corresponding collisions, so we must manually tally up the elastic energy for the neutrals
         number een_neutrals = (nu_e_O / (_gmodel.mol_masses[i_O]/AvN))
                             + (nu_e_O2 / (_gmodel.mol_masses[i_O2]/AvN))
                             + (nu_e_N / (_gmodel.mol_masses[i_N]/AvN))
                             + (nu_e_N2 / (_gmodel.mol_masses[i_N2]/AvN))
                             + (nu_e_NO / (_gmodel.mol_masses[i_NO]/AvN));
+
         // The ionic species have one overarching collision, so we can just divide by the average mass of the ions instead of tallying
         number ions_avg_mass = ((_gmodel.mol_masses[i_Op] + _gmodel.mol_masses[i_O2p]
                             + _gmodel.mol_masses[i_O2m] + _gmodel.mol_masses[i_Np]
@@ -1034,7 +994,7 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
             // 'Equilibrium' vibrational energy from transrotational temperature
             number e_v_star = (R_universal / _gmodel.mol_masses[isp]) * theta_v / (exp(theta_v / Q.T) - 1.0);
 
-            // Current vib energy from vibroelectronic temperature
+            // Current vibrational energy from vibroelectronic temperature
             number e_v = (R_universal / _gmodel.mol_masses[isp]) * theta_v / (exp(theta_v / Q.T_modes[0]) - 1.0);
 
             // Landau-Teller relaxation rate
@@ -1052,9 +1012,10 @@ final class LowTwoTemperatureAirKinetics : ThermochemicalReactor {
         bool result = true;
         if (S[0] < 0.0) { result = false; }
         if (S[0] > _n_e_max) { result = false; }
-        if (S[11] < _u_min_heavy_particles) { result = false; }
+        //if (S[11] < _u_min_heavy_particles) { result = false; }
         return result;
     }
+
 private:
     // Table 3: Polynomial coefficients needed to determine the electron temperature
     immutable double[] k_Te_coef = [
@@ -1175,7 +1136,7 @@ version(two_temperature_reacting_air_kinetics_test) {
     import util.msg_service;
     import std.math : isClose;
     import gas.low_two_temperature_reacting_air;
-    string unit_test_case = "energy investigation";
+    string unit_test_case = "sensitivity investigation";
     void main() {
         if ( unit_test_case == "relaxation") {
             auto L = init_lua_State();
@@ -1242,7 +1203,7 @@ version(two_temperature_reacting_air_kinetics_test) {
 
 
         else if ( unit_test_case == "energy investigation") {
-        // Special test to see how species behave in a low temperature but high energy 0D flow field chemical case
+            // Special test to see how species behave in a low temperature but high energy 0D flow field chemical case
             auto L = init_lua_State();
             doLuaFile(L, "sample-input/two-temperature-reacting-air-model.lua");
             auto gm = new TwoTemperatureReactingAir(L);
@@ -1333,6 +1294,79 @@ version(two_temperature_reacting_air_kinetics_test) {
             }
         } // End energy investigation test case
 
-        else {throw new Exception("Invalid low temperature air plasma test case");}
+        else if ( unit_test_case == "sensitivity investigation") {
+            // Test to see how the electron mass fraction after 15 microseconds of 0D simulation behaves with different electric fields, initial temperatures,
+            // and ratio of transrotational and vibroelectronic temperature
+
+            auto L = init_lua_State();
+            doLuaFile(L, "sample-input/two-temperature-reacting-air-model.lua");
+            auto gm = new TwoTemperatureReactingAir(L);
+            auto reactor = new LowTwoTemperatureAirKinetics("sample-input/two-temperature-reacting-air-model.lua", gm);
+            auto gd = GasState(gm);
+
+            // Setup parameter ranges
+            number[4] T_ratios = [1.0, 10.0, 20.0, 30.0];
+            
+            // Initialise electric field from 0 to 25000 V/m every 1000 V/m
+            number[] E_fields;
+            number E_min = 0.0;
+            number E_max = 25000.0;
+            number E_n_steps = 250;
+            for (number E = E_min; E <= E_max; E += (E_max - E_min) / E_n_steps) {
+                E_fields ~= E;
+            }
+
+            // Fixed parameters
+            number max_time = 25.0e-6; // Write in data at 25 microseconds
+            number dt = 1.0e-9;
+            int n_steps = to!int(max_time/dt + 1);
+
+            foreach (testcase, ratio; T_ratios) {        
+                writeln("Test case " ~ to!string(testcase) ~ " of 3");
+                File file = File("two_temperature_reacting_air_kinetics_test_results_v" ~ to!string(testcase) ~".data", "w");
+                file.writeln("\"E_field (V/m)\", \"e_mass_frac\", \"O2-_mass_fraction\"");        
+                foreach (E_mag; E_fields) {
+                    // Initial plasma parameters and gas state initial condition
+                    reactor.bulk_v_elec_p = 2000.0; // m/s
+                    reactor.B_mag_p = 1.0; // T
+                    reactor.Qb_p = 30.0e6; // W/m3
+                    gd.T_modes[0] = 300.0;
+                    gd.T = gd.T_modes[0] * ratio; // Set Tve based on the ratio
+                    gd.p = 2000.0; // Pa (Not sure why, this was just in one of Roshan's test cases - I believe it is tied to a Parent, 2016 test)
+                    // Each electric field
+                    reactor.E_mag_p = E_mag;
+
+                    // Mass fractions
+                    gd.massf[] = 0.0;
+                    number Xi = 1.0e-4; // Ionization factor
+
+                    double W_e = 5.4858e-7;  // Electron molar mass, kg/mol
+                    // Compute mixture molar mass the same way pfe.lua does
+                    double M_mixt = 0.79*(1.0-2.0*Xi)*28.0e-3 + 0.21*(1.0-2.0*Xi)*32.0e-3
+                                + 0.79*Xi*28.0e-3 + 0.21*Xi*32.0e-3 + Xi*W_e;
+                    // Compute mass fractions also the same way
+                    gd.massf[gm.species_index("N2")]  = 0.79*(1.0-2.0*Xi) * 28.0e-3 / M_mixt;
+                    gd.massf[gm.species_index("O2")]  = 0.21*(1.0-2.0*Xi) * 32.0e-3 / M_mixt;
+                    gd.massf[gm.species_index("N2+")] = 0.79*Xi * 28.0e-3 / M_mixt;
+                    gd.massf[gm.species_index("O2+")] = 0.21*Xi * 32.0e-3 / M_mixt;
+                    gd.massf[gm.species_index("e-")]  = Xi * W_e / M_mixt;
+
+                    gm.update_thermo_from_pT(gd);
+
+                    double[maxParams] params; // Ignore, is used in opCall but we use public variables instead
+                    // Run the time loop, we only need the last value
+                    number time = 0.0;
+                    foreach (i; 0 .. n_steps) {
+                        reactor(gd, dt, dt, params);
+                        time += dt;
+                    }
+                    file.writeln(format("%e, %e, %e", E_mag, gd.massf[gm.species_index("e-")], gd.massf[gm.species_index("O2-")]));
+                }
+                file.close();
+            }
+        }
+
+        else { throw new Exception("Invalid low temperature air plasma test case"); }
+
     } // end main()
 } // end two_temperature_reacting_air_kinetics_test

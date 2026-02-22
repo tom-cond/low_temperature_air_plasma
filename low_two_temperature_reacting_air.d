@@ -32,7 +32,7 @@ import gas.physical_constants;
 import gas.diffusion.viscosity;
 import gas.diffusion.therm_cond;
 import gas.thermo.perf_gas_mix_eos; // Added based on two_temperature_air
-import gas.thermo.cea_thermo_curves; // Added based on two_temperature_air
+import gas.thermo.cea_thermo_curves; // Added based on two_temperature_air - not needed
 
 immutable double T_REF = 298.15; // K, reference temperature for formation enthalpies
 immutable double[12] formation_enthalpies = [
@@ -41,7 +41,7 @@ immutable double[12] formation_enthalpies = [
     1568787.228,    // O+
     0.0,            // O2
     1171828.436,    // O2+
-    0.0,            // O2-, 0.0 for now, will try to find a reliable source for this at some point. But it is shallowly researched
+    0.0,            // O2-, 0.0 for now, will try to find a reliable source for this at some point. But it is shallowly researched ?
     472680.0,       // N
     1882127.624,    // N+
     0.0,            // N2
@@ -119,7 +119,6 @@ public:
         _R.length = _n_species;
         _molef.length = _n_species;
         _particleMass.length = _n_species;
-        //_charge.length = _n_species;
         _del_hf.length = _n_species;
         foreach (isp; 0 .. _n_species) {
             _R[isp] = R_universal / _mol_masses[isp];
@@ -127,16 +126,6 @@ public:
             _particleMass[isp] *= 1000.0; // Changed to grams
             // Formation enthalpies of each species in J/kg is the value of enthalpy at 298.15K
             _del_hf[isp] = formation_enthalpies[isp] / _mol_masses[isp];
-
-            //if (_species_ids[isp] == Species.e_minus) {
-            //    _charge[isp] = -1;
-            //} else if (_species_names[isp].endsWith("+")) {
-            //    _charge[isp] = 1;
-            //} else if (_species_names[isp].endsWith("-")) {
-            //    _charge[isp] = -1;
-            //} else {
-            //    _charge[isp] = 0;
-            //} - Not needed here
         }        
 
         // Cp in translation and rotation is fixed, hence let's define it to make gas temperature easier to calculate later
@@ -175,7 +164,6 @@ public:
         _ion_tol = getDoubleWithDefault(L, -1, "ion_tol", 0.0);
         _Te_default = getDoubleWithDefault(L, -1, "Te_default", 10000.0);
         lua_pop(L, 1); // dispose of the table
-        // Compute derived parameters
         create_species_reverse_lookup();
     } // end constructor
 
@@ -257,8 +245,7 @@ public:
         Q.T = update_gas_temperature(Q);
         number Te = _Te_default; // in case alpha == 0.0
         if (alpha > _ion_tol) {
-            // CHANGE THIS TO A DIFFERENT DEFINITION OF Te IF NOT DOING THE HARD CODED ABLE PLASMA CASE
-            Te = Q.T_modes[0]; // The electron temperature is already defined in the kinetics file for this hard coded case
+            Te = Q.T_modes[0];
         }
         if (Te > 500.0e3) { Te = 500.0e3; }
         //if (Te < 200.0) { Te = 200.0; }
@@ -283,17 +270,10 @@ public:
             debug { msg ~= format("\nQ=%s\n", Q); }
             throw new GasModelException(msg);
         }
-        /*number alpha = ionisation_fraction_from_mass_fractions(Q);
-        Q.a = sqrt(5./3.*_Rgas*(Q.T + alpha*Q.T_modes[0]));
-
-        // Let's try this out
-        number R = mass_average(Q, _R);
-
         // Let's assume a frozen speed of sound, as it could be expected that the sound wave passes fast enough
         // that the chemistry and vibrational energy does not have time to change (i.e. frozen)
         // We will calculate it assuming a boltzmann distribution and hence use the equipartition theorem to calculate gamma
         // Although in hindsight it was suggested I could just use 1.4 for gamma, as stated in the air species-database in Eilmer
-        */
         number Cp_mix = 0.0;
         number Cv_mix = 0.0;
 
@@ -316,12 +296,6 @@ public:
     }
     override void update_trans_coeffs(ref GasState Q)
     {
-        // For the transport coefficients (viscosity, transrotational thermal conductivity, and vibroelectronic thermal conductivity)
-        // We could calculate the viscosity of each individual species (except e-) using curve fits as a function
-        // of the heavy-particle (bulk gas) temperature. Then use the Wilke's mixing rule or Gupta-Yos model to determine the viscosity.
-        // For thermal conductivity...
-        // Ignore the above, was chasing geese
-
         // We will assume the properties of air molecules, technically ignoring the ionisation. Taken from the Eilmer
         // species-database, will we use the Sutherland law from "Table 1-2, White (2006)" and "Table 1-3, White (2006)"
         double mu_ref = 1.716e-5;
@@ -426,7 +400,7 @@ public:
                 e_ve += Q.massf[i] * ((3.0/2.0) * _R[i] * (Te - T_REF) + _del_hf[i] - (_R[i] * T_REF));
                 continue;
             }
-            // Vibrational energy (Parent, 2025) -> e_v = (R_i*theta_i)/(exp(theta_i/T_v) - 1)
+            // Vibrational energy (Parent, 2025) -> e_v = (R_i*theta_i)/(exp(theta_i/T_v) - 1) (which is just the classic definition)
             // Then this needs to be in reference to T_REF vibrational energies
             if (_species_ids[i] == Species.O2) theta_v = theta_v_O2;
             else if (_species_ids[i] == Species.N2) theta_v = theta_v_N2;
@@ -471,13 +445,6 @@ public:
 
     @nogc number vibElecTemperature(in GasState Q)
     {
-        // Iteratively solve for T_modes[0] given u_modes[0]
-        // using Newton-Raphson: T_new = T_old - f(T)/f'(T), where f(T) = vibElecEnergy(T) - u_modes[0] and f'(T) = Cv
-        // Special case for if u_modes[0] is close to zero, return minimum vibroelectronic temperature
-        //if (Q.u_modes[0] <= 0.0) {  // <= 0 J/kg
-        //return 200.0;  // Min vibrational temperature
-    //}
-        // The above check was removed as it was made before I realised I needed to reference u_modes[0]
         int MAX_ITERATIONS = 20;
         double TOL = 1.0e-6;
         double E_TOL = 0.01; // J
@@ -625,7 +592,7 @@ private:
     }
 } // end class
 
-//// Unit test of the basic gas model...
+// Unit test of the basic gas model
 
 version(two_temperature_reacting_air_test) {
     import std.stdio;
@@ -646,7 +613,6 @@ version(two_temperature_reacting_air_test) {
         gd.massf[Species.N2] = 0.77;
         gd.massf[Species.O2] = 0.23;
 
-        // assert(isClose(gm.R(gd), 208.0, 1.0e-4), failedUnitTest()); Could change to something applicable to air test?
         assert(gm.n_modes == 1, failedUnitTest() ~ " : Incorrect number of modes");
         assert(gm.n_species == 12, failedUnitTest() ~ " : Incorrect number of species");
         assert(isClose(gd.p, 101325.0, 1.0e-6), failedUnitTest() ~ " : Pressure initialisation failed");
@@ -676,20 +642,7 @@ version(two_temperature_reacting_air_test) {
 
         assert(gd.u > 0.0, failedUnitTest() ~ " : Internal energy" ~ to!string(gd.u) ~ " J should be positive");
         assert(h_test > gd.u, failedUnitTest() ~ " : Enthalpy " ~ to!string(h_test) ~ " J/kg should be greater than internal energy");
-        // Remnants of the Argon unit test from their paper
-        //number my_Cv = gm.dudT_const_v(gd);
-        //number my_u = my_Cv*300.0;
-        //assert(isClose(gd.u, my_u, 1.0e-3), failedUnitTest());
-
-        // number my_Cp = gm.dhdT_const_p(gd);
-        // number alpha = gm.ionisation_fraction_from_mass_fractions(gd);
-        // number my_a = sqrt(5.0/3.0*208.0*(gd.T + alpha*gd.T_modes[0]));
-        // assert(isClose(gd.a, my_a, 1.0e-3), failedUnitTest());
-
-        // gm.update_trans_coeffs(gd);
-        // assert(isClose(gd.mu, 22.912e-6, 1.0e-3), failedUnitTest());
-        // assert(isClose(gd.k, 0.0178625, 1.0e-6), failedUnitTest());
-
+        
         return 0; // The Argon gas file manually returned 0 because it was failing I assume?
     }
 }

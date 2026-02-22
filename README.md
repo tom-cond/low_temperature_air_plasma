@@ -1,7 +1,7 @@
 # Low Temperature Air Plasma README
 
 ## Prerequisites:
-NOTE - The low temperature air plasma model was developed in Eilmer Version 4.1.0, if you wish to convert the files to Eilmer Version 5.0.0 (lmr), you will need to make the conversions yourself (sorry)
+NOTE - The low temperature air plasma model was developed in Eilmer Version 4.1.0, if you wish to convert the files to Eilmer Version 5.0.0 (lmr), you will need to make the conversions yourself (sorry).
 
 It is presumed you have Eilmer installed on your device and all of its prerequisites, the below prerequisites are additional to the base Eilmer model:
 - Gas-dynamic library
@@ -18,14 +18,18 @@ Copy the gas file into ```gdtk/src/gas```
 
 Copy the .lua files in this repository (in ```sample-data``` and ```sample-input```) into their respective gas and kinetics sample-data and sample-input directories, the unit tests will refer to them. Ensure you choose your kinetics ODE method, only Forward Euler and Runge Kutta 4 are implemented, a Backward Euler was not implemented purely since time was of the essence in this project and we have a state vector with 12 variables.
 
-Choose your case (relaxation or energy investigation)
+Choose your case (relaxation, energy investigation, or sensitivity investigation). Then, choose your desired timestep (and hence the number of steps being taken), maximum time of the test simulation, and your desired initial gas state variables. You may change the mass fraction definitions, but ensure they all add to 1. Also, choose your preferred bulk electron velocity, magentic field strength, and electron beam volumetric power - the cases vary in electric field strength so you shouldn't need to stress about that.
 
-In your linux environment, move to the kinetics directory (```$ cd gdtk/src/kinetics```) and run all kinetics tests (```$ make test```) which will run through all of the kinetics file tests
+For the sensitivity investigation specifically, currently the number of electric field steps is set at 250 (i.e. increases by 100 V/m each step), this is relatively fine and may take some time if being done on a laptop. Change this to 25 to replicate the ```kinetics_sensitivity_v2.1.0``` plot, but 250 is specifically for the ```kinetics_sensitivity_v2.1.1``` plot.
+
+In your linux environment, move to the kinetics directory (```$ cd gdtk/src/kinetics```) and run all kinetics tests (```$ make test```) which will run through all of the kinetics file tests.
 
 ## To use the plotting scripts:
-If you used the relaxation test case, run the ```low_temp_air_plasma_relaxation_plotting.py``` script
+If you ran the energy investigation test case, set ```case = 'energy investigation'``` and then run the ```low_temp_air_plasma_plotting.py``` script.
 
-If you used the energy investigation test case, run the ```low_temp_air_plasma_energy_plotting.py``` script
+If you used the relaxation test case, set ```case = 'relaxation'``` and then run the ```low_temp_air_plasma_plotting.py``` script.
+
+If you used the sensitivity investigation case, set ```case = 'sensitivity investigation'``` and then run the ```low_temp_air_plasma_plotting.py``` script.
 
 ## Version updates:
 Version 1.0.0
@@ -46,9 +50,15 @@ Version 2.0.0
   - Better care has been taken when calculating the number density of NO+, ensuring we don't get any negative values
   - The GasState is now updated after each step in the Forward Euler and Runge Kutta 4 methods to improve stability
   - Changed the elastic energy exchange method to better reflect the Appleton-Bray expression as defined by Nick Gibbons in two_temperature_air_kinetics.d
-  - The elastic energy exchange was kept outside of the state vector derivatives, i.e. an external source, since the electron temperature is maintained by the reduced electric field strength rather than beingmaintained by the vibroelectronic energy. This energy exchange is implemented into the ODE loops. The electron velocity for the elastic energy exchange was also changed from the bulk electron velocity to the averagethermal velocity from the Boltzmann distribution in statistical mechanics
+  - The elastic energy exchange was kept outside of the state vector derivatives, i.e. an external source, since the electron temperature is maintained by the reduced electric field strength rather than beingmaintained by the vibroelectronic energy. This energy exchange is implemented into the ODE loops.
+  - The electron velocity for the elastic energy exchange was changed from the bulk electron velocity to the average thermal velocity from the Boltzmann distribution in statistical mechanics
   - Removed the reliance on the bulk electron velocity in the update_reaction_rates function due to the update above
   - Fixed some silly unit errors
   - Included a git diff file for Eilmer developers to better implement my model into the gdtk source code
   - Included a git log file to better inform which version of Eilmer my model was made in
   - Cleaned up unnecessary code to save on some computational cost
+
+Version 2.1.0
+  - Included a third sensitivity test case to observe how the negatively charged species behave depending on the ratio of transrotational and vibroelectronic temperature against the strength of the electric field applied.
+  - Removed some unnecessary comments that I had brushed over
+  - Merged the plotting scripts into one file with different cases
