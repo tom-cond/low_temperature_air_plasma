@@ -9,6 +9,7 @@
  * Authors: Thomas Condon
  * Inspired By: Daniel Smith, Rory Kelly and Peter J.
  * Version: 03-February-2026: initial development
+ * Version 1.2.1: 19-February-2026: Implemented reference vibrational energy
  */
 
 module gas.low_two_temperature_reacting_air;

@@ -9,6 +9,12 @@
  * Authors: Thomas Condon
  * Inspired By: Daniel Smith, Rory Kelly and Peter J.
  * Version: 14-January-2026: initial development
+ * Version 1.0.0: 18-February-2026: First working unit test results
+ * Version 1.1.0: 19-February-2026: Cleaned up typos
+ * Version 1.2.0: 19-February-2026: Implemented better management of of 2T mechanism
+ * Version 1.2.1: 19-February-2026: Implemented reference vibrational energy
+ * Version 2.0.0: 20-February-2026: Big redo of some things
+ * Version 2.1.0: 22-February-2026: Implemented sensitvity investigation
  */
 
 module kinetics.low_two_temperature_reacting_air_kinetics;
